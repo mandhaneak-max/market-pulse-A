@@ -1,0 +1,15 @@
+# Core web server
+flask==3.0.3
+flask-cors==4.0.1
+gunicorn==22.0.0
+
+# News fetching
+requests==2.32.3
+feedparser==6.0.11
+beautifulsoup4==4.12.3
+
+# Gemini AI SDK (included as requested; app.py currently talks to Gemini
+# directly over its REST endpoint via `requests`, which sidesteps SDK
+# version churn — but this package is here if you want to switch to the
+# official client, e.g. `import google.generativeai as genai`).
+google-generativeai==0.8.3
