@@ -12,6 +12,8 @@ Run locally:
 Deploy: see the setup guide provided alongside this file.
 """
 
+from __future__ import annotations
+
 import os
 import re
 import json
@@ -62,6 +64,24 @@ FETCH_INTERVAL_SECONDS = 300     # re-pull RSS feeds at most every 5 minutes
 MAX_STORED_ARTICLES = 500        # keep the last N articles as our "history"
 REQUEST_TIMEOUT = 12
 
+# Free, unofficial Yahoo Finance "chart" endpoint — no API key required.
+# NOTE: this is an undocumented public endpoint. It's fine for a personal/
+# free-tier project, but Yahoo can rate-limit or change it without notice.
+# If it ever stops working, swap TICKER_SYMBOLS for a proper market-data
+# provider (e.g. Twelve Data, Alpha Vantage, or NSE's own data feeds).
+YAHOO_CHART_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}"
+YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) MarketPulse/1.0"}
+TICKER_SYMBOLS = {
+    "sensex": "^BSESN",
+    "nifty": "^NSEI",
+    "usdinr": "INR=X",
+    "crude": "CL=F",
+    "gold": "GC=F",     # USD per troy ounce — converted to INR/gram below
+    "silver": "SI=F",   # USD per troy ounce — converted to INR/10g below
+}
+TICKER_CACHE_SECONDS = 60
+TROY_OUNCE_IN_GRAMS = 31.1034768
+
 # --------------------------------------------------------------------------
 # In-memory storage (simple + zero-setup; swap for a DB later if you want
 # persistence across restarts).
@@ -71,6 +91,13 @@ _lock = threading.Lock()
 _news_store: dict[str, dict] = {}     # link -> article
 _analysis_cache: dict[str, dict] = {} # cache_key -> Gemini analysis result
 _last_fetch_time = 0.0
+
+_ticker_cache: dict | None = None
+_ticker_cache_time = 0.0
+
+_prediction_cache: dict | None = None
+_prediction_cache_time = 0.0
+PREDICTION_CACHE_SECONDS = 900  # regenerate the AI market outlook at most every 15 min
 
 
 # --------------------------------------------------------------------------
@@ -147,6 +174,91 @@ def fetch_all_feeds(force: bool = False) -> None:
     _last_fetch_time = now
 
 
+def _fetch_yahoo_quote(symbol: str) -> dict | None:
+    """Return {'price': float, 'prev_close': float} for a Yahoo symbol, or None on failure."""
+    try:
+        url = YAHOO_CHART_URL.format(symbol=symbol)
+        resp = requests.get(
+            url,
+            headers=YAHOO_HEADERS,
+            params={"range": "1d", "interval": "5m"},
+            timeout=REQUEST_TIMEOUT,
+        )
+        resp.raise_for_status()
+        meta = resp.json()["chart"]["result"][0]["meta"]
+        price = meta.get("regularMarketPrice")
+        prev_close = meta.get("chartPreviousClose") or meta.get("previousClose")
+        if price is None or prev_close is None:
+            return None
+        return {"price": float(price), "prev_close": float(prev_close)}
+    except Exception as exc:
+        print(f"[market-pulse] WARNING: yahoo quote failed for '{symbol}': {exc}")
+        return None
+
+
+def _pct_change(price: float, prev_close: float) -> float:
+    if not prev_close:
+        return 0.0
+    return round((price - prev_close) / prev_close * 100, 2)
+
+
+def _direction(pct: float) -> str:
+    if pct > 0.01:
+        return "UP"
+    if pct < -0.01:
+        return "DOWN"
+    return "FLAT"
+
+
+def build_ticker() -> dict:
+    """Fetch Sensex/Nifty/Gold/USD-INR/Crude/Silver, cached for TICKER_CACHE_SECONDS."""
+    global _ticker_cache, _ticker_cache_time
+    now = time.time()
+    if _ticker_cache and (now - _ticker_cache_time) < TICKER_CACHE_SECONDS:
+        return _ticker_cache
+
+    quotes = {name: _fetch_yahoo_quote(sym) for name, sym in TICKER_SYMBOLS.items()}
+    result = {}
+
+    for name in ("sensex", "nifty", "crude"):
+        q = quotes.get(name)
+        if q:
+            pct = _pct_change(q["price"], q["prev_close"])
+            result[name] = {"value": round(q["price"], 2), "change_pct": pct, "direction": _direction(pct)}
+        else:
+            result[name] = {"value": None, "change_pct": None, "direction": "FLAT"}
+
+    usdinr_q = quotes.get("usdinr")
+    usdinr_rate = usdinr_q["price"] if usdinr_q else None
+    if usdinr_q:
+        pct = _pct_change(usdinr_q["price"], usdinr_q["prev_close"])
+        result["usdinr"] = {"value": round(usdinr_q["price"], 2), "change_pct": pct, "direction": _direction(pct)}
+    else:
+        result["usdinr"] = {"value": None, "change_pct": None, "direction": "FLAT"}
+
+    # Gold/silver futures are quoted in USD per troy ounce — convert to INR/gram
+    # (illustrative retail-style figures, not official bullion rates).
+    for name, per_grams in (("gold", 1), ("silver", 10)):
+        q = quotes.get(name)
+        if q and usdinr_rate:
+            price_inr_per_gram = (q["price"] / TROY_OUNCE_IN_GRAMS) * usdinr_rate * per_grams
+            prev_inr_per_gram = (q["prev_close"] / TROY_OUNCE_IN_GRAMS) * usdinr_rate * per_grams
+            pct = _pct_change(price_inr_per_gram, prev_inr_per_gram)
+            result[name] = {
+                "value": round(price_inr_per_gram, 2),
+                "change_pct": pct,
+                "direction": _direction(pct),
+                "unit": f"INR/{per_grams}g",
+            }
+        else:
+            result[name] = {"value": None, "change_pct": None, "direction": "FLAT", "unit": f"INR/{per_grams}g"}
+
+    result["updated_at"] = datetime.now(timezone.utc).isoformat()
+    _ticker_cache = result
+    _ticker_cache_time = now
+    return result
+
+
 def call_gemini_for_analysis(title: str, summary: str, language: str) -> dict:
     """Ask Gemini to turn a headline into a structured, plain-language impact card."""
     if not GEMINI_API_KEY:
@@ -219,6 +331,67 @@ News summary/context: {summary if summary else "(no additional summary provided)
     parsed.setdefault("sectors", [])
     parsed.setdefault("stocks", [])
     parsed.setdefault("disclaimer", "Estimates are illustrative only and not investment advice.")
+    return parsed
+
+
+def call_gemini_for_prediction(headlines: list, language: str) -> dict:
+    """Ask Gemini for a short-term overall market outlook based on recent headlines."""
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set on the server")
+
+    lang_instruction = (
+        "Write every text field in simple Hinglish (Hindi+English mix, Roman script)."
+        if language == "hinglish"
+        else "Write every text field in simple, plain, beginner-friendly English."
+    )
+    headline_block = "\n".join(f"- {h}" for h in headlines[:12]) or "(no recent headlines available)"
+
+    prompt = f"""You are a cautious market-outlook assistant for Indian retail investors.
+
+Based ONLY on the recent headlines below, give a short-term (next few trading sessions) view.
+Respond with ONLY a single valid JSON object (no markdown fences) with EXACTLY this shape:
+
+{{
+  "overall_outlook": "1-3 sentences on likely Sensex/Nifty direction and why",
+  "sentiment": "Bullish" | "Bearish" | "Neutral",
+  "sectors_up": [{{"name": "sector", "reason": "short reason"}}],
+  "sectors_down": [{{"name": "sector", "reason": "short reason"}}],
+  "key_risks": ["short risk 1", "short risk 2"],
+  "disclaimer": "one short sentence noting this is an illustrative, non-advisory view"
+}}
+
+Rules:
+- Base this only on the headlines given; do not invent unrelated events.
+- Keep each field concise.
+- {lang_instruction}
+
+Recent headlines:
+{headline_block}
+"""
+
+    payload = {
+        "contents": [{"parts": [{"text": prompt}]}],
+        "generationConfig": {"temperature": 0.4, "response_mime_type": "application/json"},
+    }
+    headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
+    resp = requests.post(GEMINI_URL, headers=headers, data=json.dumps(payload), timeout=30)
+    resp.raise_for_status()
+    body = resp.json()
+
+    try:
+        raw_text = body["candidates"][0]["content"]["parts"][0]["text"]
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError(f"Unexpected Gemini response shape: {body}") from exc
+
+    raw_text = re.sub(r"^```(?:json)?\s*", "", raw_text.strip())
+    raw_text = re.sub(r"\s*```$", "", raw_text)
+    parsed = json.loads(raw_text)
+    parsed.setdefault("overall_outlook", "")
+    parsed.setdefault("sentiment", "Neutral")
+    parsed.setdefault("sectors_up", [])
+    parsed.setdefault("sectors_down", [])
+    parsed.setdefault("key_risks", [])
+    parsed.setdefault("disclaimer", "Illustrative outlook only — not investment advice.")
     return parsed
 
 
@@ -346,6 +519,45 @@ def api_analyze():
 @app.route("/api/events")
 def api_events():
     return jsonify({"events": EVENTS})
+
+
+@app.route("/api/ticker")
+def api_ticker():
+    """Live-ish Sensex/Nifty/Gold/USD-INR/Crude/Silver snapshot (best-effort, cached)."""
+    return jsonify(build_ticker())
+
+
+@app.route("/api/prediction")
+def api_prediction():
+    """AI-generated short-term market outlook based on the most recent headlines."""
+    global _prediction_cache, _prediction_cache_time
+    language = (request.args.get("language") or "english").strip().lower()
+
+    fetch_all_feeds()
+    with _lock:
+        articles = sorted(_news_store.values(), key=lambda a: a["published"], reverse=True)
+    headlines = [a["title"] for a in articles[:12]]
+
+    cache_key = f"{language}:{'|'.join(headlines)}"
+    now = time.time()
+    if (
+        _prediction_cache
+        and _prediction_cache.get("_cache_key") == cache_key
+        and (now - _prediction_cache_time) < PREDICTION_CACHE_SECONDS
+    ):
+        return jsonify({k: v for k, v in _prediction_cache.items() if k != "_cache_key"})
+
+    try:
+        prediction = call_gemini_for_prediction(headlines, language)
+    except requests.HTTPError as exc:
+        return jsonify({"error": f"Gemini API error: {exc.response.status_code} {exc.response.text[:300]}"}), 502
+    except Exception as exc:
+        return jsonify({"error": f"AI prediction failed: {exc}"}), 502
+
+    prediction["_cache_key"] = cache_key
+    _prediction_cache = prediction
+    _prediction_cache_time = now
+    return jsonify({k: v for k, v in prediction.items() if k != "_cache_key"})
 
 
 # --------------------------------------------------------------------------
