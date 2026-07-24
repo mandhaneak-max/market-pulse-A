@@ -43,9 +43,11 @@ CORS(app)  # allow index.html to call this API from any origin (needed if you ho
 
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "").strip()
 # You can override the model via an env var without touching code.
-# Check https://ai.google.dev/gemini-api/docs/models for the current list
-# of available model names if this one is ever retired.
-GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.5-flash")
+# Google retires/renames Gemini models periodically — if this one ever
+# 404s again, check https://ai.google.dev/gemini-api/docs/models for the
+# current generally-available (GA) model name and update here or via the
+# GEMINI_MODEL environment variable (no code change needed).
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-3.6-flash")
 GEMINI_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 )
@@ -302,7 +304,6 @@ News summary/context: {summary if summary else "(no additional summary provided)
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
         "generationConfig": {
-            "temperature": 0.4,
             "response_mime_type": "application/json",
         },
     }
@@ -371,7 +372,7 @@ Recent headlines:
 
     payload = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.4, "response_mime_type": "application/json"},
+        "generationConfig": {"response_mime_type": "application/json"},
     }
     headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
     resp = requests.post(GEMINI_URL, headers=headers, data=json.dumps(payload), timeout=30)
