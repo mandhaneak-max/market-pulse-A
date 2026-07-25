@@ -257,56 +257,164 @@ def _load_stock_master(force: bool = False) -> None:
     print("[market-pulse] WARNING: falling back to curated stock alias list only")
 
 
-def _search_stocks(text: str, limit: int = 8) -> list[tuple[str, str]]:
-    """Search curated aliases + the full NSE master list for free text.
-    Returns up to `limit` (symbol, company_name) matches, best-first,
-    so the search bar can resolve ANY listed company, not just a fixed few."""
+# --------------------------------------------------------------------------
+# BSE (Bombay Stock Exchange) — free, public "list of scrips" endpoint.
+# This adds BSE-ONLY-listed companies (plenty of small/mid caps trade on
+# BSE but were never listed on NSE) to the search universe. For their live
+# prices we lean on Yahoo Finance's "<scripcode>.BO" symbols — the same
+# reliable fallback path already used for NSE stocks below — rather than
+# calling BSE's own unofficial quote API from a cloud server, which tends
+# to hit the same IP-blocking issues NSE's API does.
+# --------------------------------------------------------------------------
+
+BSE_SCRIP_LIST_URL = (
+    "https://api.bseindia.com/BseIndiaAPI/api/ListOfScrips/w"
+    "?Group=&Scripcode=&industry=&segment=Equity&status=Active"
+)
+BSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://www.bseindia.com/",
+    "Origin": "https://www.bseindia.com",
+}
+
+_bse_master: list[dict] = []   # [{"symbol": "...", "name": "...", "exchange": "BSE", "yahoo_symbol": "500325.BO"}]
+_bse_master_time = 0.0
+_bse_master_lock = threading.Lock()
+
+
+def _first(row: dict, *keys: str):
+    """Return the first present, non-empty value among several possible key
+    spellings — BSE's unofficial API doesn't have documented/stable field
+    casing, so we check a few known variants rather than assume one."""
+    for k in keys:
+        v = row.get(k)
+        if v not in (None, ""):
+            return v
+    return None
+
+
+def _load_bse_master(force: bool = False) -> None:
+    """Download BSE's official list of ALL active equity scrips (free, no key).
+    Best-effort: if BSE's response shape ever changes, this just logs a
+    warning and the app keeps working fine on NSE search/prices alone."""
+    global _bse_master, _bse_master_time
+    now = time.time()
+    with _bse_master_lock:
+        if _bse_master and not force and (now - _bse_master_time) < STOCK_MASTER_TTL:
+            return
+
+    try:
+        resp = requests.get(BSE_SCRIP_LIST_URL, headers=BSE_HEADERS, timeout=15)
+        resp.raise_for_status()
+        raw = resp.json()
+        rows = raw if isinstance(raw, list) else (raw.get("Table") or raw.get("data") or [])
+
+        # Skip companies already searchable via NSE, so e.g. "reliance"
+        # doesn't list the same company twice (once per exchange).
+        nse_names = {row["name"].strip().lower() for row in _stock_master} if _stock_master else set()
+
+        parsed = []
+        for row in rows or []:
+            code = _first(row, "SC_CODE", "SCRIP_CD", "Scrip_Cd", "scrip_cd", "ScripCode")
+            name = _first(row, "SC_NAME", "Scrip_Name", "scrip_name", "ScripName")
+            sym  = _first(row, "scrip_id", "SCRIP_ID", "ScripId", "Symbol") or code
+            if not code or not name:
+                continue
+            name = str(name).strip()
+            if name.lower() in nse_names:
+                continue  # already covered via the NSE list
+            parsed.append({
+                "symbol": str(sym).strip(),
+                "name": name,
+                "exchange": "BSE",
+                "yahoo_symbol": f"{code}.BO",
+            })
+
+        if parsed:
+            with _bse_master_lock:
+                _bse_master = parsed
+                _bse_master_time = now
+            print(f"[market-pulse] Loaded {len(parsed)} additional BSE-only listed stocks")
+            return
+    except Exception as exc:
+        print(f"[market-pulse] WARNING: could not load BSE scrip list: {exc}")
+
+    print("[market-pulse] WARNING: BSE stock list unavailable this cycle — NSE search still works fine")
+
+
+def _search_stocks(text: str, limit: int = 8) -> list[dict]:
+    """Search curated aliases + the full NSE list + the BSE-only list for
+    free text. Returns up to `limit` matches, best-first, each a dict with
+    symbol / company_name / exchange — so the search bar can resolve ANY
+    listed company on either exchange, not just a fixed few."""
     q = (text or "").strip().lower()
     if not q:
         return []
 
-    _load_stock_master()  # no-op if already fresh; blocks briefly on first-ever call
+    _load_stock_master()  # NSE — no-op if already fresh
+    _load_bse_master()    # BSE — no-op if already fresh
 
-    results: list[tuple[str, str]] = []
+    results: list[dict] = []
     seen: set[str] = set()
 
-    def _add(symbol: str, name: str) -> None:
-        if symbol not in seen:
-            seen.add(symbol)
-            results.append((symbol, name))
+    def _add(symbol: str, name: str, exchange: str, yahoo_symbol: str) -> None:
+        key = f"{exchange}:{symbol}"
+        if key not in seen:
+            seen.add(key)
+            results.append({
+                "symbol": symbol,
+                "company_name": name,
+                "exchange": exchange,
+                "yahoo_symbol": yahoo_symbol,
+            })
 
-    # 1) Curated short-name aliases first — best UX for "hdfc", "tcs" etc.
+    # 1) Curated short-name aliases first (all NSE) — best UX for "hdfc" etc.
     if q in STOCK_SYMBOLS:
         sym, name = STOCK_SYMBOLS[q]
-        _add(sym, name)
+        _add(sym, name, "NSE", f"{sym}.NS")
     for alias, (sym, name) in STOCK_SYMBOLS.items():
         if len(results) >= limit:
             return results[:limit]
         if q in alias or alias in q:
-            _add(sym, name)
+            _add(sym, name, "NSE", f"{sym}.NS")
 
-    # 2) Exact ticker match anywhere in the full NSE list
+    # 2) Exact ticker match — NSE first, then BSE
     if len(results) < limit:
         for row in _stock_master:
             if row["symbol"].lower() == q:
-                _add(row["symbol"], row["name"])
+                _add(row["symbol"], row["name"], "NSE", f"{row['symbol']}.NS")
+                break
+    if len(results) < limit:
+        for row in _bse_master:
+            if row["symbol"].lower() == q:
+                _add(row["symbol"], row["name"], "BSE", row["yahoo_symbol"])
                 break
 
-    # 3) Symbol-starts-with / company-name-contains, across ALL listed stocks
+    # 3) Symbol-starts-with / company-name-contains — NSE then BSE
     if len(results) < limit:
         for row in _stock_master:
             if len(results) >= limit:
                 break
             sym_l, name_l = row["symbol"].lower(), row["name"].lower()
             if sym_l.startswith(q) or q in name_l:
-                _add(row["symbol"], row["name"])
+                _add(row["symbol"], row["name"], "NSE", f"{row['symbol']}.NS")
+    if len(results) < limit:
+        for row in _bse_master:
+            if len(results) >= limit:
+                break
+            sym_l, name_l = row["symbol"].lower(), row["name"].lower()
+            if sym_l.startswith(q) or q in name_l:
+                _add(row["symbol"], row["name"], "BSE", row["yahoo_symbol"])
 
     return results[:limit]
 
 
-# Warm the full stock list in the background at startup so the very first
-# search doesn't have to wait ~1-2s for the CSV download.
+# Warm both full stock lists in the background at startup so the very first
+# search doesn't have to wait for the CSV/JSON downloads.
 threading.Thread(target=_load_stock_master, daemon=True).start()
+threading.Thread(target=_load_bse_master, daemon=True).start()
 
 # --------------------------------------------------------------------------
 # In-memory storage (simple + zero-setup; swap for a DB later if you want
@@ -517,18 +625,43 @@ def _fetch_yahoo_equity_quote(nse_symbol: str, company_name: str | None = None) 
 
 
 def _match_stock(text: str) -> tuple[str | None, str | None]:
-    """Best single match across ALL NSE-listed stocks (used by chat / simple lookups).
+    """Best single match across NSE + BSE (used by chat / simple lookups).
     Returns (symbol, company_name) or (None, None)."""
     matches = _search_stocks(text, limit=1)
-    return matches[0] if matches else (None, None)
+    if not matches:
+        return None, None
+    return matches[0]["symbol"], matches[0]["company_name"]
 
 
 def _fetch_stock_quote(symbol: str, company_name: str) -> dict | None:
-    """Best-effort share quote: try NSE (most accurate) then Yahoo (more reliable from the cloud)."""
+    """Best-effort NSE share quote: try NSE's own API (most accurate) then
+    Yahoo's '<symbol>.NS' (more reliable from a cloud server)."""
     quote = _fetch_nse_quote(symbol)
     if quote and quote.get("price") is not None:
         return quote
     return _fetch_yahoo_equity_quote(symbol, company_name)
+
+
+def _fetch_quote_for_match(entry: dict) -> dict | None:
+    """Exchange-aware quote fetch for a _search_stocks() result: NSE stocks
+    use the NSE->Yahoo('.NS') chain above; BSE-only stocks (not listed on
+    NSE at all) go straight to Yahoo's '<scripcode>.BO' symbol."""
+    if entry.get("exchange") == "BSE":
+        q = _fetch_yahoo_quote(entry["yahoo_symbol"])
+        if not q:
+            return None
+        pct = _pct_change(q["price"], q["prev_close"])
+        return {
+            "symbol": entry["symbol"],
+            "company_name": entry["company_name"],
+            "price": round(q["price"], 2),
+            "change": round(q["price"] - q["prev_close"], 2),
+            "pct_change": pct,
+            "day_high": None,
+            "day_low": None,
+            "prev_close": round(q["prev_close"], 2),
+        }
+    return _fetch_stock_quote(entry["symbol"], entry["company_name"])
 
 
 def _pct_change(price: float, prev_close: float) -> float:
@@ -954,11 +1087,11 @@ def api_prediction():
 @app.route("/api/stock")
 def api_stock():
     """
-    Look up shares by name/ticker against the FULL NSE-listed universe
-    (~2000 companies, not just a curated few) and return live quotes for
-    every match — e.g. searching "tata" returns Tata Motors, Tata Steel,
-    Tata Power, Tata Consumer, TCS etc. all at once, each with its own
-    live price (NSE, falling back to Yahoo if NSE is unreachable).
+    Look up shares by name/ticker against the FULL NSE + BSE universe
+    (~2000 NSE companies plus BSE-only-listed small/mid caps) and return
+    live quotes for every match — e.g. searching "tata" returns Tata
+    Motors, Tata Steel, Tata Power, Tata Consumer, TCS etc. all at once,
+    each with its own live price and which exchange it's quoted from.
 
     Query params:
       q     - stock name or keyword (e.g. "tata", "hdfc", "reliance")
@@ -978,22 +1111,27 @@ def api_stock():
     # Fetch quotes for every matched company in parallel so this stays fast
     # even when a broad term (e.g. "bank") matches several companies.
     with ThreadPoolExecutor(max_workers=min(8, len(matches))) as pool:
-        quotes = list(pool.map(lambda m: _fetch_stock_quote(m[0], m[1]), matches))
+        quotes = list(pool.map(_fetch_quote_for_match, matches))
 
     results = [
-        {"symbol": sym, "company_name": name, "quote": quote}
-        for (sym, name), quote in zip(matches, quotes)
+        {
+            "symbol": m["symbol"],
+            "company_name": m["company_name"],
+            "exchange": m["exchange"],
+            "quote": quote,
+        }
+        for m, quote in zip(matches, quotes)
     ]
 
     # Related headlines for the single best/top match only, to keep this fast.
-    top_symbol, top_name = matches[0]
+    top = matches[0]
     fetch_all_feeds()
     with _lock:
         articles = list(_news_store.values())
-    needle = top_name.lower().split()[0]
+    needle = top["company_name"].lower().split()[0]
     related = [
         a for a in articles
-        if top_name.lower() in a["title"].lower() or needle in a["title"].lower()
+        if top["company_name"].lower() in a["title"].lower() or needle in a["title"].lower()
     ]
     related.sort(key=lambda a: a["published"], reverse=True)
 
@@ -1003,8 +1141,9 @@ def api_stock():
         "count": len(results),
         "results": results,
         # Back-compat top-level fields = best/first match
-        "symbol": top_symbol,
-        "company_name": top_name,
+        "symbol": top["symbol"],
+        "company_name": top["company_name"],
+        "exchange": top["exchange"],
         "quote": results[0]["quote"] if results else None,
         "news": related[:10],
     })
@@ -1013,8 +1152,8 @@ def api_stock():
 @app.route("/api/stocks/search")
 def api_stocks_search():
     """
-    Lightweight autocomplete: matching company names/symbols only, NO live
-    price lookups (fast). Handy for a type-ahead dropdown in the UI.
+    Lightweight autocomplete across NSE + BSE: matching company names/symbols
+    only, NO live price lookups (fast). Handy for a type-ahead dropdown.
     Query params: q - partial stock name or symbol, limit - max results (default 10)
     """
     q = (request.args.get("q") or "").strip()
@@ -1025,8 +1164,12 @@ def api_stocks_search():
     return jsonify({
         "query": q,
         "count": len(matches),
-        "results": [{"symbol": s, "company_name": n} for s, n in matches],
+        "results": [
+            {"symbol": m["symbol"], "company_name": m["company_name"], "exchange": m["exchange"]}
+            for m in matches
+        ],
     })
+
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -1049,12 +1192,13 @@ def api_chat():
         history = []
 
     context_lines = []
-    symbol, name = _match_stock(message)
-    if symbol:
-        quote = _fetch_stock_quote(symbol, name)
+    stock_matches = _search_stocks(message, limit=1)
+    if stock_matches:
+        top = stock_matches[0]
+        quote = _fetch_quote_for_match(top)
         if quote and quote.get("price") is not None:
             context_lines.append(
-                f"{name} ({symbol}): last price ₹{quote['price']}, "
+                f"{top['company_name']} ({top['symbol']}, {top['exchange']}): last price ₹{quote['price']}, "
                 f"change {quote.get('change')} ({quote.get('pct_change')}%), "
                 f"previous close ₹{quote.get('prev_close')}."
             )
