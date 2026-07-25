@@ -256,6 +256,9 @@ def _fetch_yahoo_quote(symbol: str) -> dict | None:
         return None
 
 
+NSE_TIMEOUT = 5  # fail fast — NSE often blocks cloud/datacenter IPs outright rather than erroring quickly
+
+
 def _get_nse_session() -> requests.Session:
     """Reuse a warmed-up NSE session (cookies) for NSE_SESSION_TTL seconds."""
     now = time.time()
@@ -264,7 +267,7 @@ def _get_nse_session() -> requests.Session:
     s = requests.Session()
     s.headers.update(NSE_HEADERS)
     try:
-        s.get(NSE_BASE, timeout=REQUEST_TIMEOUT)  # sets the cookies the API needs
+        s.get(NSE_BASE, timeout=NSE_TIMEOUT)  # sets the cookies the API needs
     except Exception as exc:
         print(f"[market-pulse] WARNING: NSE session warm-up failed: {exc}")
     _nse_session_cache["session"] = s
@@ -273,14 +276,15 @@ def _get_nse_session() -> requests.Session:
 
 
 def _fetch_nse_index(index_name: str) -> dict | None:
-    """Official NSE index snapshot (e.g. 'NIFTY 50') straight from NSE's own API."""
+    """Official NSE index snapshot (e.g. 'NIFTY 50') straight from NSE's own API.
+    Fails fast (short timeout, single retry) — a Yahoo fallback covers the rest."""
     try:
         s = _get_nse_session()
-        resp = s.get(NSE_INDICES_API, timeout=REQUEST_TIMEOUT)
+        resp = s.get(NSE_INDICES_API, timeout=NSE_TIMEOUT)
         if resp.status_code != 200:
-            _nse_session_cache["session"] = None  # cookies likely stale — retry fresh once
+            _nse_session_cache["session"] = None
             s = _get_nse_session()
-            resp = s.get(NSE_INDICES_API, timeout=REQUEST_TIMEOUT)
+            resp = s.get(NSE_INDICES_API, timeout=NSE_TIMEOUT)
         resp.raise_for_status()
         for row in resp.json().get("data", []):
             if row.get("index", "").strip().upper() == index_name.upper():
@@ -295,23 +299,27 @@ def _fetch_nse_index(index_name: str) -> dict | None:
 
 
 def _fetch_nse_quote(symbol: str) -> dict | None:
-    """Official NSE live quote for an equity symbol (e.g. 'TCS', 'RELIANCE')."""
+    """Official NSE live quote for an equity symbol (e.g. 'TCS', 'RELIANCE').
+    Fails fast (short timeout, single retry) — _fetch_yahoo_equity_quote covers the rest."""
     try:
         s = _get_nse_session()
-        resp = s.get(NSE_QUOTE_API, params={"symbol": symbol}, timeout=REQUEST_TIMEOUT)
+        resp = s.get(NSE_QUOTE_API, params={"symbol": symbol}, timeout=NSE_TIMEOUT)
         if resp.status_code != 200:
             _nse_session_cache["session"] = None
             s = _get_nse_session()
-            resp = s.get(NSE_QUOTE_API, params={"symbol": symbol}, timeout=REQUEST_TIMEOUT)
+            resp = s.get(NSE_QUOTE_API, params={"symbol": symbol}, timeout=NSE_TIMEOUT)
         resp.raise_for_status()
         data = resp.json()
         price_info = data.get("priceInfo", {}) or {}
         info = data.get("info", {}) or {}
         high_low = price_info.get("intraDayHighLow", {}) or {}
+        price = price_info.get("lastPrice")
+        if price is None:
+            return None
         return {
             "symbol": symbol,
             "company_name": info.get("companyName", symbol),
-            "price": price_info.get("lastPrice"),
+            "price": price,
             "change": price_info.get("change"),
             "pct_change": price_info.get("pChange"),
             "day_high": high_low.get("max"),
@@ -321,6 +329,46 @@ def _fetch_nse_quote(symbol: str) -> dict | None:
     except Exception as exc:
         print(f"[market-pulse] WARNING: NSE quote failed for '{symbol}': {exc}")
         return None
+
+
+def _fetch_yahoo_equity_quote(nse_symbol: str, company_name: str | None = None) -> dict | None:
+    """Fallback price source for an individual NSE-listed stock via Yahoo (symbol + '.NS').
+    Used whenever NSE's own API is unreachable (e.g. blocked from a cloud server)."""
+    q = _fetch_yahoo_quote(f"{nse_symbol}.NS")
+    if not q:
+        return None
+    pct = _pct_change(q["price"], q["prev_close"])
+    return {
+        "symbol": nse_symbol,
+        "company_name": company_name or nse_symbol,
+        "price": round(q["price"], 2),
+        "change": round(q["price"] - q["prev_close"], 2),
+        "pct_change": pct,
+        "day_high": None,
+        "day_low": None,
+        "prev_close": round(q["prev_close"], 2),
+    }
+
+
+def _match_stock(text: str) -> tuple[str | None, str | None]:
+    """Match free text against STOCK_SYMBOLS aliases. Returns (symbol, company_name) or (None, None)."""
+    q = (text or "").strip().lower()
+    if not q:
+        return None, None
+    if q in STOCK_SYMBOLS:
+        return STOCK_SYMBOLS[q]
+    for alias, (symbol, name) in STOCK_SYMBOLS.items():
+        if alias in q or q in alias:
+            return symbol, name
+    return None, None
+
+
+def _fetch_stock_quote(symbol: str, company_name: str) -> dict | None:
+    """Best-effort share quote: try NSE (most accurate) then Yahoo (more reliable from the cloud)."""
+    quote = _fetch_nse_quote(symbol)
+    if quote and quote.get("price") is not None:
+        return quote
+    return _fetch_yahoo_equity_quote(symbol, company_name)
 
 
 def _pct_change(price: float, prev_close: float) -> float:
@@ -523,7 +571,7 @@ Recent headlines:
     return parsed
 
 
-def call_gemini_chat(history: list, message: str, language: str) -> str:
+def call_gemini_chat(history: list, message: str, language: str, context_text: str = "") -> str:
     """Send a chat turn (with prior history) to Gemini and return the reply text."""
     if not GEMINI_API_KEY:
         raise RuntimeError("GEMINI_API_KEY is not set on the server")
@@ -533,18 +581,30 @@ def call_gemini_chat(history: list, message: str, language: str) -> str:
         if language == "hinglish"
         else "Reply in simple, plain English."
     )
+
+    if context_text:
+        data_note = (
+            "You HAVE been given live market data below — it is real and current, and you have "
+            "full permission to state it directly and confidently. Do not say you lack access to "
+            "real-time data when the figure you need is already listed here.\n\n"
+            f"LIVE DATA:\n{context_text}"
+        )
+    else:
+        data_note = (
+            "No specific live price was looked up for this message. If the user asks for a live "
+            "price you don't have, say you don't have that particular figure right now, but still "
+            "answer anything else about the company/sector/market from general knowledge."
+        )
+
     system_text = (
         "You are the Market Pulse assistant — a friendly, plain-language guide to the Indian "
         "stock market for retail investors. Keep answers concise and avoid heavy jargon. "
         "You are not a licensed financial advisor; make clear that anything resembling a "
-        "prediction or recommendation is illustrative only, not investment advice. "
-        + lang_instruction
+        "prediction or recommendation is illustrative only, not investment advice.\n\n"
+        + data_note + "\n\n" + lang_instruction
     )
 
-    contents = [
-        {"role": "user", "parts": [{"text": system_text}]},
-        {"role": "model", "parts": [{"text": "Understood — I'll act as a friendly, plain-language market guide."}]},
-    ]
+    contents = []
     for turn in history[-10:]:
         role = "user" if turn.get("role") == "user" else "model"
         text = (turn.get("content") or "").strip()
@@ -552,7 +612,10 @@ def call_gemini_chat(history: list, message: str, language: str) -> str:
             contents.append({"role": role, "parts": [{"text": text}]})
     contents.append({"role": "user", "parts": [{"text": message}]})
 
-    payload = {"contents": contents}
+    payload = {
+        "system_instruction": {"parts": [{"text": system_text}]},
+        "contents": contents,
+    }
     headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
     resp = requests.post(GEMINI_URL, headers=headers, data=json.dumps(payload), timeout=30)
     resp.raise_for_status()
@@ -732,26 +795,19 @@ def api_prediction():
 def api_stock():
     """
     Look up a share by name/ticker (matched against STOCK_SYMBOLS) and return
-    its live NSE quote plus recent related headlines.
+    its live quote (NSE, falling back to Yahoo if NSE is unreachable) plus
+    recent related headlines.
     Query params: q - stock name or keyword (e.g. "tata motors", "hdfc")
     """
-    q = (request.args.get("q") or "").strip().lower()
+    q = (request.args.get("q") or "").strip()
     if not q:
         return jsonify({"error": "'q' query param is required"}), 400
 
-    matched_symbol = matched_name = None
-    if q in STOCK_SYMBOLS:
-        matched_symbol, matched_name = STOCK_SYMBOLS[q]
-    else:
-        for alias, (symbol, name) in STOCK_SYMBOLS.items():
-            if alias in q or q in alias:
-                matched_symbol, matched_name = symbol, name
-                break
-
+    matched_symbol, matched_name = _match_stock(q)
     if not matched_symbol:
         return jsonify({"matched": False, "quote": None, "news": []})
 
-    quote = _fetch_nse_quote(matched_symbol)
+    quote = _fetch_stock_quote(matched_symbol, matched_name)
 
     fetch_all_feeds()
     with _lock:
@@ -774,7 +830,13 @@ def api_stock():
 
 @app.route("/api/chat", methods=["POST"])
 def api_chat():
-    """Simple stateless chatbot — the client sends the full history each turn."""
+    """
+    Simple stateless chatbot — the client sends the full history each turn.
+    Before calling Gemini, we look for a stock mention in the message and, if
+    found, fetch its real quote — plus the latest Sensex/Nifty snapshot — and
+    hand that to the model as live context so it can answer directly instead
+    of saying it has no access to real-time data.
+    """
     data = request.get_json(force=True, silent=True) or {}
     message = (data.get("message") or "").strip()
     history = data.get("history") or []
@@ -785,8 +847,28 @@ def api_chat():
     if not isinstance(history, list):
         history = []
 
+    context_lines = []
+    symbol, name = _match_stock(message)
+    if symbol:
+        quote = _fetch_stock_quote(symbol, name)
+        if quote and quote.get("price") is not None:
+            context_lines.append(
+                f"{name} ({symbol}): last price ₹{quote['price']}, "
+                f"change {quote.get('change')} ({quote.get('pct_change')}%), "
+                f"previous close ₹{quote.get('prev_close')}."
+            )
     try:
-        reply = call_gemini_chat(history, message, language)
+        ticker = build_ticker()
+        if ticker.get("sensex", {}).get("value") is not None:
+            context_lines.append(f"Sensex: {ticker['sensex']['value']} ({ticker['sensex']['direction']}).")
+        if ticker.get("nifty", {}).get("value") is not None:
+            context_lines.append(f"Nifty 50: {ticker['nifty']['value']} ({ticker['nifty']['direction']}).")
+    except Exception:
+        pass
+    context_text = "\n".join(context_lines)
+
+    try:
+        reply = call_gemini_chat(history, message, language, context_text)
     except requests.HTTPError as exc:
         return jsonify({"error": f"Gemini API error: {exc.response.status_code} {exc.response.text[:300]}"}), 502
     except Exception as exc:
