@@ -16,11 +16,14 @@ from __future__ import annotations
 
 import os
 import re
+import csv
+import io
 import json
 import time
 import hashlib
 import threading
 from datetime import datetime, timedelta, timezone
+from concurrent.futures import ThreadPoolExecutor
 
 import requests
 import feedparser
@@ -104,23 +107,31 @@ NSE_SESSION_TTL = 240  # re-warm cookies every 4 minutes
 _nse_session_cache = {"session": None, "time": 0.0}
 
 # Common Indian stocks the search bar / chips can resolve to an NSE symbol.
-# alias (lowercase) -> (NSE symbol, display name). Add more any time —
-# it's just a lookup table.
+# alias (lowercase) -> (NSE symbol, display name). This is checked FIRST
+# (fast, human-friendly short names) before falling back to the full NSE
+# master list below — add more any time, it's just a lookup table.
 STOCK_SYMBOLS = {
     "reliance": ("RELIANCE", "Reliance Industries"),
     "tcs": ("TCS", "Tata Consultancy Services"),
     "tata consultancy": ("TCS", "Tata Consultancy Services"),
     "tata motors": ("TATAMOTORS", "Tata Motors"),
     "tata steel": ("TATASTEEL", "Tata Steel"),
+    "tata power": ("TATAPOWER", "Tata Power"),
+    "tata consumer": ("TATACONSUM", "Tata Consumer Products"),
     "hdfc bank": ("HDFCBANK", "HDFC Bank"),
     "hdfc": ("HDFCBANK", "HDFC Bank"),
+    "hdfc life": ("HDFCLIFE", "HDFC Life Insurance"),
     "infosys": ("INFY", "Infosys"),
     "sbi": ("SBIN", "State Bank of India"),
     "state bank of india": ("SBIN", "State Bank of India"),
+    "sbi life": ("SBILIFE", "SBI Life Insurance"),
     "maruti": ("MARUTI", "Maruti Suzuki"),
     "maruti suzuki": ("MARUTI", "Maruti Suzuki"),
     "adani enterprises": ("ADANIENT", "Adani Enterprises"),
     "adani": ("ADANIENT", "Adani Enterprises"),
+    "adani ports": ("ADANIPORTS", "Adani Ports & SEZ"),
+    "adani green": ("ADANIGREEN", "Adani Green Energy"),
+    "adani power": ("ADANIPOWER", "Adani Power"),
     "icici bank": ("ICICIBANK", "ICICI Bank"),
     "icici": ("ICICIBANK", "ICICI Bank"),
     "axis bank": ("AXISBANK", "Axis Bank"),
@@ -134,13 +145,168 @@ STOCK_SYMBOLS = {
     "hul": ("HINDUNILVR", "Hindustan Unilever"),
     "kotak": ("KOTAKBANK", "Kotak Mahindra Bank"),
     "bajaj finance": ("BAJFINANCE", "Bajaj Finance"),
+    "bajaj finserv": ("BAJAJFINSV", "Bajaj Finserv"),
+    "bajaj auto": ("BAJAJ-AUTO", "Bajaj Auto"),
     "sun pharma": ("SUNPHARMA", "Sun Pharmaceutical Industries"),
     "ntpc": ("NTPC", "NTPC"),
     "ongc": ("ONGC", "Oil and Natural Gas Corporation"),
     "coal india": ("COALINDIA", "Coal India"),
     "asian paints": ("ASIANPAINT", "Asian Paints"),
     "titan": ("TITAN", "Titan Company"),
+    "hcl tech": ("HCLTECH", "HCL Technologies"),
+    "hcltech": ("HCLTECH", "HCL Technologies"),
+    "tech mahindra": ("TECHM", "Tech Mahindra"),
+    "power grid": ("POWERGRID", "Power Grid Corporation"),
+    "m&m": ("M&M", "Mahindra & Mahindra"),
+    "mahindra": ("M&M", "Mahindra & Mahindra"),
+    "jsw steel": ("JSWSTEEL", "JSW Steel"),
+    "dr reddy": ("DRREDDY", "Dr. Reddy's Laboratories"),
+    "cipla": ("CIPLA", "Cipla"),
+    "divis lab": ("DIVISLAB", "Divi's Laboratories"),
+    "eicher motors": ("EICHERMOT", "Eicher Motors"),
+    "grasim": ("GRASIM", "Grasim Industries"),
+    "hero motocorp": ("HEROMOTOCO", "Hero MotoCorp"),
+    "hindalco": ("HINDALCO", "Hindalco Industries"),
+    "indusind bank": ("INDUSINDBK", "IndusInd Bank"),
+    "britannia": ("BRITANNIA", "Britannia Industries"),
+    "apollo hospitals": ("APOLLOHOSP", "Apollo Hospitals"),
+    "shree cement": ("SHREECEM", "Shree Cement"),
+    "ultratech": ("ULTRACEMCO", "UltraTech Cement"),
+    "nestle": ("NESTLEIND", "Nestle India"),
+    "bpcl": ("BPCL", "Bharat Petroleum"),
+    "ioc": ("IOC", "Indian Oil Corporation"),
+    "indian oil": ("IOC", "Indian Oil Corporation"),
+    "vedanta": ("VEDL", "Vedanta"),
+    "ltimindtree": ("LTIM", "LTIMindtree"),
+    "pidilite": ("PIDILITIND", "Pidilite Industries"),
+    "zomato": ("ETERNAL", "Eternal (Zomato)"),
+    "paytm": ("PAYTM", "One97 Communications (Paytm)"),
+    "nykaa": ("NYKAA", "FSN E-Commerce (Nykaa)"),
+    "irctc": ("IRCTC", "IRCTC"),
+    "dmart": ("DMART", "Avenue Supermarts (DMart)"),
+    "yes bank": ("YESBANK", "Yes Bank"),
+    "pnb": ("PNB", "Punjab National Bank"),
+    "canara bank": ("CANBK", "Canara Bank"),
+    "bank of baroda": ("BANKBARODA", "Bank of Baroda"),
+    "idfc first": ("IDFCFIRSTB", "IDFC First Bank"),
+    "hindustan aeronautics": ("HAL", "Hindustan Aeronautics"),
+    "hal": ("HAL", "Hindustan Aeronautics"),
+    "bhel": ("BHEL", "Bharat Heavy Electricals"),
+    "bel": ("BEL", "Bharat Electronics"),
+    "zydus": ("ZYDUSLIFE", "Zydus Lifesciences"),
+    "lupin": ("LUPIN", "Lupin"),
+    "godrej consumer": ("GODREJCP", "Godrej Consumer Products"),
+    "dabur": ("DABUR", "Dabur India"),
+    "marico": ("MARICO", "Marico"),
+    "colgate": ("COLPAL", "Colgate-Palmolive India"),
+    "united spirits": ("MCDOWELL-N", "United Spirits"),
+    "vodafone idea": ("IDEA", "Vodafone Idea"),
+    "vi": ("IDEA", "Vodafone Idea"),
 }
+
+# --------------------------------------------------------------------------
+# Full NSE stock master list — ALL listed equities, straight from NSE's own
+# free, public, no-key-required CSV. This is what makes the search bar work
+# for literally any listed company, not just the curated aliases above.
+# Source: NSE India's official archives (the same file nseindia.com itself
+# publishes for "list of securities available for trading").
+# --------------------------------------------------------------------------
+
+NSE_EQUITY_LIST_URLS = [
+    "https://nsearchives.nseindia.com/content/equity/EQUITY_L.csv",
+    "https://archives.nseindia.com/content/equity/EQUITY_L.csv",
+]
+STOCK_MASTER_TTL = 24 * 3600  # the list of listed companies barely changes — refresh once a day
+
+_stock_master: list[dict] = []   # [{"symbol": "TCS", "name": "Tata Consultancy Services Limited"}, ...]
+_stock_master_time = 0.0
+_stock_master_lock = threading.Lock()
+
+
+def _load_stock_master(force: bool = False) -> None:
+    """Download NSE's official list of ALL listed equities (free CSV, no key).
+    Cached for STOCK_MASTER_TTL. Safe to call often — it no-ops when fresh."""
+    global _stock_master, _stock_master_time
+    now = time.time()
+    with _stock_master_lock:
+        if _stock_master and not force and (now - _stock_master_time) < STOCK_MASTER_TTL:
+            return
+
+    for url in NSE_EQUITY_LIST_URLS:
+        try:
+            resp = requests.get(url, headers=NSE_HEADERS, timeout=15)
+            resp.raise_for_status()
+            reader = csv.DictReader(io.StringIO(resp.text))
+            rows = []
+            for row in reader:
+                symbol = (row.get("SYMBOL") or "").strip()
+                name = (row.get("NAME OF COMPANY") or "").strip()
+                if symbol and name:
+                    rows.append({"symbol": symbol, "name": name})
+            if rows:
+                with _stock_master_lock:
+                    _stock_master = rows
+                    _stock_master_time = now
+                print(f"[market-pulse] Loaded {len(rows)} NSE-listed stocks from {url}")
+                return
+        except Exception as exc:
+            print(f"[market-pulse] WARNING: could not load NSE equity list from {url}: {exc}")
+
+    # Both sources failed — app keeps working fine on the curated STOCK_SYMBOLS
+    # aliases above (~90 well-known companies) until the next refresh attempt.
+    print("[market-pulse] WARNING: falling back to curated stock alias list only")
+
+
+def _search_stocks(text: str, limit: int = 8) -> list[tuple[str, str]]:
+    """Search curated aliases + the full NSE master list for free text.
+    Returns up to `limit` (symbol, company_name) matches, best-first,
+    so the search bar can resolve ANY listed company, not just a fixed few."""
+    q = (text or "").strip().lower()
+    if not q:
+        return []
+
+    _load_stock_master()  # no-op if already fresh; blocks briefly on first-ever call
+
+    results: list[tuple[str, str]] = []
+    seen: set[str] = set()
+
+    def _add(symbol: str, name: str) -> None:
+        if symbol not in seen:
+            seen.add(symbol)
+            results.append((symbol, name))
+
+    # 1) Curated short-name aliases first — best UX for "hdfc", "tcs" etc.
+    if q in STOCK_SYMBOLS:
+        sym, name = STOCK_SYMBOLS[q]
+        _add(sym, name)
+    for alias, (sym, name) in STOCK_SYMBOLS.items():
+        if len(results) >= limit:
+            return results[:limit]
+        if q in alias or alias in q:
+            _add(sym, name)
+
+    # 2) Exact ticker match anywhere in the full NSE list
+    if len(results) < limit:
+        for row in _stock_master:
+            if row["symbol"].lower() == q:
+                _add(row["symbol"], row["name"])
+                break
+
+    # 3) Symbol-starts-with / company-name-contains, across ALL listed stocks
+    if len(results) < limit:
+        for row in _stock_master:
+            if len(results) >= limit:
+                break
+            sym_l, name_l = row["symbol"].lower(), row["name"].lower()
+            if sym_l.startswith(q) or q in name_l:
+                _add(row["symbol"], row["name"])
+
+    return results[:limit]
+
+
+# Warm the full stock list in the background at startup so the very first
+# search doesn't have to wait ~1-2s for the CSV download.
+threading.Thread(target=_load_stock_master, daemon=True).start()
 
 # --------------------------------------------------------------------------
 # In-memory storage (simple + zero-setup; swap for a DB later if you want
@@ -351,16 +517,10 @@ def _fetch_yahoo_equity_quote(nse_symbol: str, company_name: str | None = None) 
 
 
 def _match_stock(text: str) -> tuple[str | None, str | None]:
-    """Match free text against STOCK_SYMBOLS aliases. Returns (symbol, company_name) or (None, None)."""
-    q = (text or "").strip().lower()
-    if not q:
-        return None, None
-    if q in STOCK_SYMBOLS:
-        return STOCK_SYMBOLS[q]
-    for alias, (symbol, name) in STOCK_SYMBOLS.items():
-        if alias in q or q in alias:
-            return symbol, name
-    return None, None
+    """Best single match across ALL NSE-listed stocks (used by chat / simple lookups).
+    Returns (symbol, company_name) or (None, None)."""
+    matches = _search_stocks(text, limit=1)
+    return matches[0] if matches else (None, None)
 
 
 def _fetch_stock_quote(symbol: str, company_name: str) -> dict | None:
@@ -794,37 +954,78 @@ def api_prediction():
 @app.route("/api/stock")
 def api_stock():
     """
-    Look up a share by name/ticker (matched against STOCK_SYMBOLS) and return
-    its live quote (NSE, falling back to Yahoo if NSE is unreachable) plus
-    recent related headlines.
-    Query params: q - stock name or keyword (e.g. "tata motors", "hdfc")
+    Look up shares by name/ticker against the FULL NSE-listed universe
+    (~2000 companies, not just a curated few) and return live quotes for
+    every match — e.g. searching "tata" returns Tata Motors, Tata Steel,
+    Tata Power, Tata Consumer, TCS etc. all at once, each with its own
+    live price (NSE, falling back to Yahoo if NSE is unreachable).
+
+    Query params:
+      q     - stock name or keyword (e.g. "tata", "hdfc", "reliance")
+      limit - max number of matching companies to return (default 8, max 15)
     """
     q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", default=8, type=int)
+    limit = max(1, min(limit or 8, 15))
+
     if not q:
         return jsonify({"error": "'q' query param is required"}), 400
 
-    matched_symbol, matched_name = _match_stock(q)
-    if not matched_symbol:
-        return jsonify({"matched": False, "quote": None, "news": []})
+    matches = _search_stocks(q, limit=limit)
+    if not matches:
+        return jsonify({"matched": False, "query": q, "count": 0, "results": [], "quote": None, "news": []})
 
-    quote = _fetch_stock_quote(matched_symbol, matched_name)
+    # Fetch quotes for every matched company in parallel so this stays fast
+    # even when a broad term (e.g. "bank") matches several companies.
+    with ThreadPoolExecutor(max_workers=min(8, len(matches))) as pool:
+        quotes = list(pool.map(lambda m: _fetch_stock_quote(m[0], m[1]), matches))
 
+    results = [
+        {"symbol": sym, "company_name": name, "quote": quote}
+        for (sym, name), quote in zip(matches, quotes)
+    ]
+
+    # Related headlines for the single best/top match only, to keep this fast.
+    top_symbol, top_name = matches[0]
     fetch_all_feeds()
     with _lock:
         articles = list(_news_store.values())
-    needle = matched_name.lower().split()[0]
+    needle = top_name.lower().split()[0]
     related = [
         a for a in articles
-        if matched_name.lower() in a["title"].lower() or needle in a["title"].lower()
+        if top_name.lower() in a["title"].lower() or needle in a["title"].lower()
     ]
     related.sort(key=lambda a: a["published"], reverse=True)
 
     return jsonify({
         "matched": True,
-        "symbol": matched_symbol,
-        "company_name": matched_name,
-        "quote": quote,
+        "query": q,
+        "count": len(results),
+        "results": results,
+        # Back-compat top-level fields = best/first match
+        "symbol": top_symbol,
+        "company_name": top_name,
+        "quote": results[0]["quote"] if results else None,
         "news": related[:10],
+    })
+
+
+@app.route("/api/stocks/search")
+def api_stocks_search():
+    """
+    Lightweight autocomplete: matching company names/symbols only, NO live
+    price lookups (fast). Handy for a type-ahead dropdown in the UI.
+    Query params: q - partial stock name or symbol, limit - max results (default 10)
+    """
+    q = (request.args.get("q") or "").strip()
+    limit = request.args.get("limit", default=10, type=int)
+    limit = max(1, min(limit or 10, 25))
+
+    matches = _search_stocks(q, limit=limit)
+    return jsonify({
+        "query": q,
+        "count": len(matches),
+        "results": [{"symbol": s, "company_name": n} for s, n in matches],
     })
 
 
