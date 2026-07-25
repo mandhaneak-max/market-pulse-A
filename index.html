@@ -213,7 +213,21 @@
   .empty-state, .loading-state{ text-align:center; color: var(--text-dim); font-size:13px; padding:40px 20px; }
   .footer-note{ text-align:center; font-size:11px; color: var(--text-faint); padding: 18px 24px 4px; line-height:1.5; }
 
-  /* ---------- Stock lookup card ---------- */
+  /* ---------- Multi-stock results strip ---------- */
+  .stock-results-wrap{ margin-bottom:14px; }
+  .stock-results-label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color: var(--text-dim); margin-bottom:8px; }
+  .stock-results-scroll{ display:flex; gap:10px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
+  .stock-results-scroll::-webkit-scrollbar{ display:none; }
+  .stock-mini-card{ background: var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 14px; min-width:150px; flex-shrink:0; }
+  .stock-mini-name{ font-size:12px; font-weight:700; color: var(--text); line-height:1.3; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:170px; }
+  .stock-mini-sym{ font-size:10px; color: var(--text-faint); margin-bottom:6px; }
+  .stock-mini-price{ font-size:16px; font-weight:750; }
+  .stock-mini-change{ font-size:11.5px; font-weight:650; margin-top:2px; }
+  .stock-mini-change.up{ color: var(--green); }
+  .stock-mini-change.down{ color: var(--red); }
+  .stock-mini-unavailable{ font-size:11px; color: var(--text-faint); font-style:italic; }
+
+  /* ---------- Stock lookup card (single, e.g. from chat context) ---------- */
   .stock-card{
     background: var(--card); border:1px solid var(--border); border-radius: var(--radius);
     padding:16px; margin-bottom:16px; border-left:3px solid var(--navy-1);
@@ -601,8 +615,9 @@
       try {
         const stockUrl = new URL(`${API_BASE}/api/stock`, window.location.origin);
         stockUrl.searchParams.set("q", query);
+        stockUrl.searchParams.set("limit", "8");
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 8000);
+        const timer = setTimeout(() => controller.abort(), 12000);
         const stockRes = await fetch(stockUrl, { signal: controller.signal });
         clearTimeout(timer);
         stockData = await stockRes.json();
@@ -618,13 +633,14 @@
     renderNews(articles, stockData);
   }
 
-  function renderStockCard(data) {
-    const q = data.quote;
+  function renderStockMiniCard(item) {
+    const q = item.quote;
     if (!q || q.price == null) {
       return `
-        <div class="stock-card">
-          <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · NSE</span></div></div>
-          <div class="stock-unavailable">Live price temporarily unavailable — showing related news below.</div>
+        <div class="stock-mini-card">
+          <div class="stock-mini-name" title="${escapeHtml(item.company_name)}">${escapeHtml(item.company_name)}</div>
+          <div class="stock-mini-sym">${escapeHtml(item.symbol)} · NSE</div>
+          <div class="stock-mini-unavailable">Price unavailable</div>
         </div>`;
     }
     const pct = q.pct_change || 0;
@@ -632,20 +648,31 @@
     const sign = pct >= 0 ? "+" : "";
     const arrow = pct >= 0 ? "▲" : "▼";
     return `
-      <div class="stock-card">
-        <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · NSE</span></div></div>
-        <div class="stock-price">₹${fmtNum(q.price)}</div>
-        <div class="stock-change ${changeClass}">${sign}${fmtNum(q.change)} (${sign}${fmtNum(q.pct_change)}%) ${arrow}</div>
-        <div class="stock-meta-row">
-          <div>Day High<b>₹${fmtNum(q.day_high)}</b></div>
-          <div>Day Low<b>₹${fmtNum(q.day_low)}</b></div>
-          <div>Prev Close<b>₹${fmtNum(q.prev_close)}</b></div>
+      <div class="stock-mini-card">
+        <div class="stock-mini-name" title="${escapeHtml(item.company_name)}">${escapeHtml(item.company_name)}</div>
+        <div class="stock-mini-sym">${escapeHtml(item.symbol)} · NSE</div>
+        <div class="stock-mini-price">₹${fmtNum(q.price)}</div>
+        <div class="stock-mini-change ${changeClass}">${sign}${fmtNum(q.change)} (${sign}${fmtNum(q.pct_change)}%) ${arrow}</div>
+      </div>`;
+  }
+
+  // Renders EVERY matching stock (not just the single best match) as a
+  // horizontal-scroll strip of price cards — e.g. searching "tata" shows
+  // Tata Motors, Tata Steel, TCS, Tata Power etc. all at once.
+  function renderStockResults(data) {
+    const results = (data && data.matched && Array.isArray(data.results)) ? data.results : [];
+    if (!results.length) return "";
+    return `
+      <div class="stock-results-wrap">
+        <div class="stock-results-label">📈 Matching stocks (${results.length})</div>
+        <div class="stock-results-scroll">
+          ${results.map(renderStockMiniCard).join("")}
         </div>
       </div>`;
   }
 
   function renderNews(articles, stockData) {
-    const stockHtml = (stockData && stockData.matched) ? renderStockCard(stockData) : "";
+    const stockHtml = (stockData && stockData.matched) ? renderStockResults(stockData) : "";
 
     if (!articles.length) {
       contentArea.innerHTML = stockHtml || '<div class="empty-state">No news found. Try a different search term.</div>';
