@@ -84,6 +84,64 @@ TICKER_SYMBOLS = {
 TICKER_CACHE_SECONDS = 60
 TROY_OUNCE_IN_GRAMS = 31.1034768
 
+# NSE India's own (unofficial but official-source) JSON API. This needs a
+# warmed-up session (cookies from a normal page load) before the API will
+# respond — that's what _get_nse_session() does. This is the most accurate
+# source we can get for free for individual share prices and the Nifty
+# index; Sensex/gold/silver/crude/USD-INR aren't published by NSE so those
+# stay on the Yahoo fallback above.
+NSE_BASE = "https://www.nseindia.com"
+NSE_QUOTE_API = "https://www.nseindia.com/api/quote-equity"
+NSE_INDICES_API = "https://www.nseindia.com/api/allIndices"
+NSE_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
+    "Accept": "*/*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.nseindia.com/",
+}
+NSE_SESSION_TTL = 240  # re-warm cookies every 4 minutes
+_nse_session_cache = {"session": None, "time": 0.0}
+
+# Common Indian stocks the search bar / chips can resolve to an NSE symbol.
+# alias (lowercase) -> (NSE symbol, display name). Add more any time —
+# it's just a lookup table.
+STOCK_SYMBOLS = {
+    "reliance": ("RELIANCE", "Reliance Industries"),
+    "tcs": ("TCS", "Tata Consultancy Services"),
+    "tata consultancy": ("TCS", "Tata Consultancy Services"),
+    "tata motors": ("TATAMOTORS", "Tata Motors"),
+    "tata steel": ("TATASTEEL", "Tata Steel"),
+    "hdfc bank": ("HDFCBANK", "HDFC Bank"),
+    "hdfc": ("HDFCBANK", "HDFC Bank"),
+    "infosys": ("INFY", "Infosys"),
+    "sbi": ("SBIN", "State Bank of India"),
+    "state bank of india": ("SBIN", "State Bank of India"),
+    "maruti": ("MARUTI", "Maruti Suzuki"),
+    "maruti suzuki": ("MARUTI", "Maruti Suzuki"),
+    "adani enterprises": ("ADANIENT", "Adani Enterprises"),
+    "adani": ("ADANIENT", "Adani Enterprises"),
+    "icici bank": ("ICICIBANK", "ICICI Bank"),
+    "icici": ("ICICIBANK", "ICICI Bank"),
+    "axis bank": ("AXISBANK", "Axis Bank"),
+    "wipro": ("WIPRO", "Wipro"),
+    "bharti airtel": ("BHARTIARTL", "Bharti Airtel"),
+    "airtel": ("BHARTIARTL", "Bharti Airtel"),
+    "itc": ("ITC", "ITC"),
+    "larsen": ("LT", "Larsen & Toubro"),
+    "l&t": ("LT", "Larsen & Toubro"),
+    "hindustan unilever": ("HINDUNILVR", "Hindustan Unilever"),
+    "hul": ("HINDUNILVR", "Hindustan Unilever"),
+    "kotak": ("KOTAKBANK", "Kotak Mahindra Bank"),
+    "bajaj finance": ("BAJFINANCE", "Bajaj Finance"),
+    "sun pharma": ("SUNPHARMA", "Sun Pharmaceutical Industries"),
+    "ntpc": ("NTPC", "NTPC"),
+    "ongc": ("ONGC", "Oil and Natural Gas Corporation"),
+    "coal india": ("COALINDIA", "Coal India"),
+    "asian paints": ("ASIANPAINT", "Asian Paints"),
+    "titan": ("TITAN", "Titan Company"),
+}
+
 # --------------------------------------------------------------------------
 # In-memory storage (simple + zero-setup; swap for a DB later if you want
 # persistence across restarts).
@@ -198,6 +256,73 @@ def _fetch_yahoo_quote(symbol: str) -> dict | None:
         return None
 
 
+def _get_nse_session() -> requests.Session:
+    """Reuse a warmed-up NSE session (cookies) for NSE_SESSION_TTL seconds."""
+    now = time.time()
+    if _nse_session_cache["session"] and (now - _nse_session_cache["time"]) < NSE_SESSION_TTL:
+        return _nse_session_cache["session"]
+    s = requests.Session()
+    s.headers.update(NSE_HEADERS)
+    try:
+        s.get(NSE_BASE, timeout=REQUEST_TIMEOUT)  # sets the cookies the API needs
+    except Exception as exc:
+        print(f"[market-pulse] WARNING: NSE session warm-up failed: {exc}")
+    _nse_session_cache["session"] = s
+    _nse_session_cache["time"] = now
+    return s
+
+
+def _fetch_nse_index(index_name: str) -> dict | None:
+    """Official NSE index snapshot (e.g. 'NIFTY 50') straight from NSE's own API."""
+    try:
+        s = _get_nse_session()
+        resp = s.get(NSE_INDICES_API, timeout=REQUEST_TIMEOUT)
+        if resp.status_code != 200:
+            _nse_session_cache["session"] = None  # cookies likely stale — retry fresh once
+            s = _get_nse_session()
+            resp = s.get(NSE_INDICES_API, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        for row in resp.json().get("data", []):
+            if row.get("index", "").strip().upper() == index_name.upper():
+                price, prev_close = row.get("last"), row.get("previousClose")
+                if price is None or prev_close is None:
+                    return None
+                return {"price": float(price), "prev_close": float(prev_close)}
+        return None
+    except Exception as exc:
+        print(f"[market-pulse] WARNING: NSE index fetch failed for '{index_name}': {exc}")
+        return None
+
+
+def _fetch_nse_quote(symbol: str) -> dict | None:
+    """Official NSE live quote for an equity symbol (e.g. 'TCS', 'RELIANCE')."""
+    try:
+        s = _get_nse_session()
+        resp = s.get(NSE_QUOTE_API, params={"symbol": symbol}, timeout=REQUEST_TIMEOUT)
+        if resp.status_code != 200:
+            _nse_session_cache["session"] = None
+            s = _get_nse_session()
+            resp = s.get(NSE_QUOTE_API, params={"symbol": symbol}, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        data = resp.json()
+        price_info = data.get("priceInfo", {}) or {}
+        info = data.get("info", {}) or {}
+        high_low = price_info.get("intraDayHighLow", {}) or {}
+        return {
+            "symbol": symbol,
+            "company_name": info.get("companyName", symbol),
+            "price": price_info.get("lastPrice"),
+            "change": price_info.get("change"),
+            "pct_change": price_info.get("pChange"),
+            "day_high": high_low.get("max"),
+            "day_low": high_low.get("min"),
+            "prev_close": price_info.get("previousClose"),
+        }
+    except Exception as exc:
+        print(f"[market-pulse] WARNING: NSE quote failed for '{symbol}': {exc}")
+        return None
+
+
 def _pct_change(price: float, prev_close: float) -> float:
     if not prev_close:
         return 0.0
@@ -219,7 +344,9 @@ def build_ticker() -> dict:
     if _ticker_cache and (now - _ticker_cache_time) < TICKER_CACHE_SECONDS:
         return _ticker_cache
 
-    quotes = {name: _fetch_yahoo_quote(sym) for name, sym in TICKER_SYMBOLS.items()}
+    quotes = {name: _fetch_yahoo_quote(sym) for name, sym in TICKER_SYMBOLS.items() if name != "nifty"}
+    # Nifty: prefer NSE's own official index feed (most accurate); Yahoo as fallback only.
+    quotes["nifty"] = _fetch_nse_index("NIFTY 50") or _fetch_yahoo_quote(TICKER_SYMBOLS["nifty"])
     result = {}
 
     for name in ("sensex", "nifty", "crude"):
@@ -396,6 +523,46 @@ Recent headlines:
     return parsed
 
 
+def call_gemini_chat(history: list, message: str, language: str) -> str:
+    """Send a chat turn (with prior history) to Gemini and return the reply text."""
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set on the server")
+
+    lang_instruction = (
+        "Reply in simple Hinglish (Hindi+English mix, Roman script)."
+        if language == "hinglish"
+        else "Reply in simple, plain English."
+    )
+    system_text = (
+        "You are the Market Pulse assistant — a friendly, plain-language guide to the Indian "
+        "stock market for retail investors. Keep answers concise and avoid heavy jargon. "
+        "You are not a licensed financial advisor; make clear that anything resembling a "
+        "prediction or recommendation is illustrative only, not investment advice. "
+        + lang_instruction
+    )
+
+    contents = [
+        {"role": "user", "parts": [{"text": system_text}]},
+        {"role": "model", "parts": [{"text": "Understood — I'll act as a friendly, plain-language market guide."}]},
+    ]
+    for turn in history[-10:]:
+        role = "user" if turn.get("role") == "user" else "model"
+        text = (turn.get("content") or "").strip()
+        if text:
+            contents.append({"role": role, "parts": [{"text": text}]})
+    contents.append({"role": "user", "parts": [{"text": message}]})
+
+    payload = {"contents": contents}
+    headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
+    resp = requests.post(GEMINI_URL, headers=headers, data=json.dumps(payload), timeout=30)
+    resp.raise_for_status()
+    body = resp.json()
+    try:
+        return body["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError(f"Unexpected Gemini response shape: {body}") from exc
+
+
 # --------------------------------------------------------------------------
 # Upcoming market-moving events
 # --------------------------------------------------------------------------
@@ -559,6 +726,73 @@ def api_prediction():
     _prediction_cache = prediction
     _prediction_cache_time = now
     return jsonify({k: v for k, v in prediction.items() if k != "_cache_key"})
+
+
+@app.route("/api/stock")
+def api_stock():
+    """
+    Look up a share by name/ticker (matched against STOCK_SYMBOLS) and return
+    its live NSE quote plus recent related headlines.
+    Query params: q - stock name or keyword (e.g. "tata motors", "hdfc")
+    """
+    q = (request.args.get("q") or "").strip().lower()
+    if not q:
+        return jsonify({"error": "'q' query param is required"}), 400
+
+    matched_symbol = matched_name = None
+    if q in STOCK_SYMBOLS:
+        matched_symbol, matched_name = STOCK_SYMBOLS[q]
+    else:
+        for alias, (symbol, name) in STOCK_SYMBOLS.items():
+            if alias in q or q in alias:
+                matched_symbol, matched_name = symbol, name
+                break
+
+    if not matched_symbol:
+        return jsonify({"matched": False, "quote": None, "news": []})
+
+    quote = _fetch_nse_quote(matched_symbol)
+
+    fetch_all_feeds()
+    with _lock:
+        articles = list(_news_store.values())
+    needle = matched_name.lower().split()[0]
+    related = [
+        a for a in articles
+        if matched_name.lower() in a["title"].lower() or needle in a["title"].lower()
+    ]
+    related.sort(key=lambda a: a["published"], reverse=True)
+
+    return jsonify({
+        "matched": True,
+        "symbol": matched_symbol,
+        "company_name": matched_name,
+        "quote": quote,
+        "news": related[:10],
+    })
+
+
+@app.route("/api/chat", methods=["POST"])
+def api_chat():
+    """Simple stateless chatbot — the client sends the full history each turn."""
+    data = request.get_json(force=True, silent=True) or {}
+    message = (data.get("message") or "").strip()
+    history = data.get("history") or []
+    language = (data.get("language") or "english").strip().lower()
+
+    if not message:
+        return jsonify({"error": "'message' is required"}), 400
+    if not isinstance(history, list):
+        history = []
+
+    try:
+        reply = call_gemini_chat(history, message, language)
+    except requests.HTTPError as exc:
+        return jsonify({"error": f"Gemini API error: {exc.response.status_code} {exc.response.text[:300]}"}), 502
+    except Exception as exc:
+        return jsonify({"error": f"Chat failed: {exc}"}), 502
+
+    return jsonify({"reply": reply})
 
 
 # --------------------------------------------------------------------------
