@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0d47a1" />
-<title>Market Pulse</title>
+<title>Atharv's News</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
 
 <style>
@@ -38,6 +38,20 @@
   }
   a{ color: inherit; }
   button{ font-family: inherit; }
+
+  /* ---------- Splash screen ---------- */
+  .splash{
+    position:fixed; inset:0; z-index:999;
+    background: linear-gradient(135deg, var(--navy-1), var(--navy-2));
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; transition: opacity .5s ease, visibility .5s ease;
+  }
+  .splash.hide{ opacity:0; visibility:hidden; pointer-events:none; }
+  .splash-icon{ font-size:42px; }
+  .splash-title{ color:#fff; font-size:22px; font-weight:700; letter-spacing:0.3px; }
+  .splash-sub{ color: rgba(255,255,255,0.6); font-size:12.5px; }
+  .splash-dot{ width:8px; height:8px; border-radius:50%; background:#69f0ae; box-shadow:0 0 8px #69f0ae; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.4; transform:scale(0.8);} }
 
   /* ---------- Header ---------- */
   .header{
@@ -198,15 +212,72 @@
 
   .empty-state, .loading-state{ text-align:center; color: var(--text-dim); font-size:13px; padding:40px 20px; }
   .footer-note{ text-align:center; font-size:11px; color: var(--text-faint); padding: 18px 24px 4px; line-height:1.5; }
+
+  /* ---------- Stock lookup card ---------- */
+  .stock-card{
+    background: var(--card); border:1px solid var(--border); border-radius: var(--radius);
+    padding:16px; margin-bottom:16px; border-left:3px solid var(--navy-1);
+  }
+  .stock-card-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
+  .stock-card-head h3{ margin:0 0 2px; font-size:16px; }
+  .stock-card-head .sym{ font-size:11.5px; color: var(--text-faint); font-weight:600; }
+  .stock-price{ font-size:24px; font-weight:750; }
+  .stock-change{ font-size:13px; font-weight:650; margin-top:2px; }
+  .stock-change.up{ color: var(--green); }
+  .stock-change.down{ color: var(--red); }
+  .stock-meta-row{ display:flex; gap:18px; margin-top:10px; font-size:11.5px; color: var(--text-dim); }
+  .stock-meta-row b{ color: var(--text); display:block; font-size:12.5px; }
+  .stock-unavailable{ font-size:12px; color: var(--text-faint); font-style:italic; }
+
+  /* ---------- Chatbot widget ---------- */
+  .chat-fab{
+    position:fixed; bottom:20px; right:18px; z-index:60;
+    width:52px; height:52px; border-radius:50%; border:none;
+    background: linear-gradient(135deg, var(--orange), #ff8f00);
+    color:#fff; font-size:22px; cursor:pointer; box-shadow:0 4px 16px rgba(255,109,0,0.4);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .chat-panel{
+    position:fixed; bottom:82px; right:16px; z-index:60;
+    width:min(340px, calc(100vw - 32px)); height:min(460px, calc(100vh - 140px));
+    background: var(--card); border:1px solid var(--border); border-radius:16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18); display:none; flex-direction:column; overflow:hidden;
+  }
+  .chat-panel.open{ display:flex; }
+  .chat-head{
+    background: linear-gradient(135deg, var(--navy-1), var(--navy-2)); color:#fff;
+    padding:12px 14px; font-size:13.5px; font-weight:650; display:flex; justify-content:space-between; align-items:center;
+  }
+  .chat-head button{ background:none; border:none; color:#fff; font-size:16px; cursor:pointer; opacity:0.8; }
+  .chat-messages{ flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .chat-msg{ font-size:12.5px; line-height:1.5; padding:8px 11px; border-radius:12px; max-width:85%; }
+  .chat-msg.user{ background: var(--navy-1); color:#fff; align-self:flex-end; border-bottom-right-radius:3px; }
+  .chat-msg.bot{ background: var(--bg); color: var(--text); align-self:flex-start; border-bottom-left-radius:3px; }
+  .chat-msg.bot.loading{ color: var(--text-faint); font-style:italic; }
+  .chat-input-row{ display:flex; gap:6px; padding:10px; border-top:1px solid var(--border); }
+  .chat-input-row input{
+    flex:1; border:1px solid var(--border); border-radius:20px; padding:9px 13px; font-size:12.5px; outline:none;
+  }
+  .chat-input-row button{
+    background: var(--orange); color:#fff; border:none; border-radius:50%;
+    width:34px; height:34px; font-size:14px; cursor:pointer; flex-shrink:0;
+  }
 </style>
 </head>
 <body>
 
+<div class="splash" id="splashScreen">
+  <div class="splash-icon">📈</div>
+  <div class="splash-title">Atharv's News</div>
+  <div class="splash-sub" id="splashSub">Market Pulse, powered by AI</div>
+  <div class="splash-dot"></div>
+</div>
+
 <div class="header">
   <div class="brand-row">
     <div class="brand-left">
-      <span class="brand-badge">MC·ET</span>
-      <span class="brand-name">Market Pulse</span>
+      <span class="brand-badge">AN</span>
+      <span class="brand-name">Atharv's News</span>
       <span class="live-dot"></span>
     </div>
     <span class="clock" id="clock"></span>
@@ -219,10 +290,10 @@
   </div>
 
   <div class="tabs-row" id="tabsRow">
-    <button class="tab-btn active" data-tab="today">📰 Today</button>
-    <button class="tab-btn" data-tab="past">🕐 Past</button>
-    <button class="tab-btn" data-tab="upcoming">📅 Upcoming</button>
-    <button class="tab-btn" data-tab="prediction">📊 Prediction</button>
+    <button class="tab-btn active" data-tab="today"><span id="tabLabelToday">📰 Today</span></button>
+    <button class="tab-btn" data-tab="past"><span id="tabLabelPast">🕐 Past</span></button>
+    <button class="tab-btn" data-tab="upcoming"><span id="tabLabelUpcoming">📅 Upcoming</span></button>
+    <button class="tab-btn" data-tab="prediction"><span id="tabLabelPrediction">📊 Prediction</span></button>
   </div>
 </div>
 
@@ -242,7 +313,7 @@
 <div class="lang-bar">
   <button class="lang-btn on" id="langEn" data-lang="english">🇬🇧 EN</button>
   <button class="lang-btn" id="langHi" data-lang="hinglish">🇮🇳 HI</button>
-  <span class="lang-hint">| AI summaries below use this language</span>
+  <span class="lang-hint" id="langHintText">| AI summaries below use this language</span>
 </div>
 
 <div class="ticker-bar">
@@ -255,24 +326,24 @@
   <div class="action-grid">
     <button class="action-btn" data-tab="today" style="border-left:3px solid var(--navy-1);">
       <span class="icon">📰</span>
-      <div><div class="title">Today's News</div><div class="sub">Live market update</div></div>
+      <div><div class="title" id="actTodayTitle">Today's News</div><div class="sub" id="actTodaySub">Live market update</div></div>
     </button>
     <button class="action-btn" data-tab="prediction" style="border-left:3px solid var(--green);">
       <span class="icon">📊</span>
-      <div><div class="title">Prediction</div><div class="sub">Sensex/Nifty outlook</div></div>
+      <div><div class="title" id="actPredTitle">Prediction</div><div class="sub" id="actPredSub">Sensex/Nifty outlook</div></div>
     </button>
     <button class="action-btn" data-tab="upcoming" style="border-left:3px solid var(--purple);">
       <span class="icon">📅</span>
-      <div><div class="title">Upcoming Events</div><div class="sub">RBI, IPO, Results</div></div>
+      <div><div class="title" id="actUpTitle">Upcoming Events</div><div class="sub" id="actUpSub">RBI, IPO, Results</div></div>
     </button>
     <button class="action-btn" data-tab="past" style="border-left:3px solid var(--amber);">
       <span class="icon">🕐</span>
-      <div><div class="title">Past 7 Days</div><div class="sub">Last week recap</div></div>
+      <div><div class="title" id="actPastTitle">Past 7 Days</div><div class="sub" id="actPastSub">Last week recap</div></div>
     </button>
   </div>
 
   <div class="quick-search-wrap">
-    <div class="section-title">More Quick Searches</div>
+    <div class="section-title" id="quickSearchLabel">More Quick Searches</div>
     <div class="chip2-row" id="stockChips">
       <button class="chip2" data-q="adani">🏗️ Adani</button>
       <button class="chip2" data-q="tata motors tata steel tcs">🚗 Tata</button>
@@ -296,12 +367,25 @@
     <div class="loading-state">Loading…</div>
   </div>
 
-  <div class="footer-note">
+  <div class="footer-note" id="footerNote">
     Market Pulse aggregates public RSS headlines and uses Gemini AI to generate plain-language,
     illustrative summaries. Sector/stock impact estimates and predictions are
     <strong>not</strong> financial advice — always do your own research before investing.
   </div>
 </main>
+
+<button class="chat-fab" id="chatFab" aria-label="Open chat">💬</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-head">
+    <span id="chatHeadTitle">Atharv's News Assistant</span>
+    <button id="chatCloseBtn">✕</button>
+  </div>
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="chat-input-row">
+    <input id="chatInput" type="text" placeholder="Ask about any stock or market topic…" autocomplete="off" />
+    <button id="chatSendBtn">➤</button>
+  </div>
+</div>
 
 <script>
 (function () {
@@ -347,11 +431,67 @@
     return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
   }
 
-  // ---------- Language toggle ----------
+  // ---------- Language toggle (translates UI chrome + AI output language) ----------
+  const TRANSLATIONS = {
+    english: {
+      tabToday: "📰 Today", tabPast: "🕐 Past", tabUpcoming: "📅 Upcoming", tabPrediction: "📊 Prediction",
+      actTodayTitle: "Today's News", actTodaySub: "Live market update",
+      actPredTitle: "Prediction", actPredSub: "Sensex/Nifty outlook",
+      actUpTitle: "Upcoming Events", actUpSub: "RBI, IPO, Results",
+      actPastTitle: "Past 7 Days", actPastSub: "Last week recap",
+      quickSearchLabel: "More Quick Searches",
+      langHint: "| AI summaries below use this language",
+      searchPlaceholder: "Search any stock, company, topic…",
+      chatPlaceholder: "Ask about any stock or market topic…",
+      footer: 'Market Pulse aggregates public RSS headlines and uses Gemini AI to generate plain-language, illustrative summaries. Sector/stock impact estimates and predictions are <strong>not</strong> financial advice — always do your own research before investing.',
+      today: "Today's News", past: "Past 7 Days", upcoming: "Upcoming Events", prediction: "Market Prediction",
+    },
+    hinglish: {
+      tabToday: "📰 Aaj", tabPast: "🕐 Pichla", tabUpcoming: "📅 Aane Wala", tabPrediction: "📊 Prediction",
+      actTodayTitle: "Aaj ki News", actTodaySub: "Live market update",
+      actPredTitle: "Prediction", actPredSub: "Sensex/Nifty ka outlook",
+      actUpTitle: "Aane Wale Events", actUpSub: "RBI, IPO, Results",
+      actPastTitle: "Pichle 7 Din", actPastSub: "Last week ka recap",
+      quickSearchLabel: "Aur Quick Searches",
+      langHint: "| Neeche ke AI summaries is language mein aayenge",
+      searchPlaceholder: "Koi bhi stock, company, ya topic search karein…",
+      chatPlaceholder: "Kisi bhi stock ya market topic ke baare mein poochein…",
+      footer: 'Market Pulse public RSS headlines collect karta hai aur Gemini AI se plain-language, illustrative summaries banata hai. Sector/stock impact estimates aur predictions <strong>financial advice nahi hain</strong> — invest karne se pehle apni research zaroor karein.',
+      today: "Aaj ki News", past: "Pichle 7 Din", upcoming: "Aane Wale Events", prediction: "Market Prediction",
+    },
+  };
+
+  function applyTranslation(lang) {
+    const t = TRANSLATIONS[lang] || TRANSLATIONS.english;
+    el("tabLabelToday").textContent = t.tabToday;
+    el("tabLabelPast").textContent = t.tabPast;
+    el("tabLabelUpcoming").textContent = t.tabUpcoming;
+    el("tabLabelPrediction").textContent = t.tabPrediction;
+    el("actTodayTitle").textContent = t.actTodayTitle;
+    el("actTodaySub").textContent = t.actTodaySub;
+    el("actPredTitle").textContent = t.actPredTitle;
+    el("actPredSub").textContent = t.actPredSub;
+    el("actUpTitle").textContent = t.actUpTitle;
+    el("actUpSub").textContent = t.actUpSub;
+    el("actPastTitle").textContent = t.actPastTitle;
+    el("actPastSub").textContent = t.actPastSub;
+    el("quickSearchLabel").textContent = t.quickSearchLabel;
+    el("langHintText").textContent = t.langHint;
+    el("footerNote").innerHTML = t.footer;
+    searchInput.placeholder = t.searchPlaceholder;
+    el("chatInput").placeholder = t.chatPlaceholder;
+    TAB_TITLES.today = t.today;
+    TAB_TITLES.past = t.past;
+    TAB_TITLES.upcoming = t.upcoming;
+    TAB_TITLES.prediction = t.prediction;
+    if (!searchQuery) contentTitle.textContent = TAB_TITLES[activeTab];
+  }
+
   function setLang(lang) {
     currentLang = lang;
     el("langEn").classList.toggle("on", lang === "english");
     el("langHi").classList.toggle("on", lang === "hinglish");
+    applyTranslation(lang);
   }
   el("langEn").addEventListener("click", () => setLang("english"));
   el("langHi").addEventListener("click", () => setLang("hinglish"));
@@ -435,29 +575,71 @@
     }
   }
 
-  // ---------- News (Today / Past / search) ----------
+  // ---------- News (Today / Past / search) — also resolves a stock match ----------
   async function loadNews(query, days) {
     contentArea.innerHTML = '<div class="loading-state">Fetching headlines…</div>';
     try {
-      const url = new URL(`${API_BASE}/api/news`, window.location.origin);
-      if (query) url.searchParams.set("q", query);
-      if (days) url.searchParams.set("days", days);
-      const res = await fetch(url);
-      const data = await res.json();
+      const newsUrl = new URL(`${API_BASE}/api/news`, window.location.origin);
+      if (query) newsUrl.searchParams.set("q", query);
+      if (days) newsUrl.searchParams.set("days", days);
+
+      const fetches = [fetch(newsUrl)];
+      if (query) {
+        const stockUrl = new URL(`${API_BASE}/api/stock`, window.location.origin);
+        stockUrl.searchParams.set("q", query);
+        fetches.push(fetch(stockUrl));
+      }
+
+      const responses = await Promise.all(fetches);
+      const data = await responses[0].json();
       allArticles = data.articles || [];
       contentBadge.textContent = allArticles.length;
-      renderNews(allArticles);
+
+      let stockData = null;
+      if (responses[1]) {
+        try { stockData = await responses[1].json(); } catch (e) { stockData = null; }
+      }
+
+      renderNews(allArticles, stockData);
     } catch (e) {
       contentArea.innerHTML = '<div class="empty-state">⚠️ Could not reach the news server. Try again shortly.</div>';
     }
   }
 
-  function renderNews(articles) {
+  function renderStockCard(data) {
+    const q = data.quote;
+    if (!q || q.price == null) {
+      return `
+        <div class="stock-card">
+          <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · NSE</span></div></div>
+          <div class="stock-unavailable">Live price temporarily unavailable — showing related news below.</div>
+        </div>`;
+    }
+    const pct = q.pct_change || 0;
+    const changeClass = pct >= 0 ? "up" : "down";
+    const sign = pct >= 0 ? "+" : "";
+    const arrow = pct >= 0 ? "▲" : "▼";
+    return `
+      <div class="stock-card">
+        <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · NSE</span></div></div>
+        <div class="stock-price">₹${fmtNum(q.price)}</div>
+        <div class="stock-change ${changeClass}">${sign}${fmtNum(q.change)} (${sign}${fmtNum(q.pct_change)}%) ${arrow}</div>
+        <div class="stock-meta-row">
+          <div>Day High<b>₹${fmtNum(q.day_high)}</b></div>
+          <div>Day Low<b>₹${fmtNum(q.day_low)}</b></div>
+          <div>Prev Close<b>₹${fmtNum(q.prev_close)}</b></div>
+        </div>
+      </div>`;
+  }
+
+  function renderNews(articles, stockData) {
+    const stockHtml = (stockData && stockData.matched) ? renderStockCard(stockData) : "";
+
     if (!articles.length) {
-      contentArea.innerHTML = '<div class="empty-state">No news found. Try a different search term.</div>';
+      contentArea.innerHTML = stockHtml || '<div class="empty-state">No news found. Try a different search term.</div>';
       return;
     }
-    contentArea.innerHTML = articles.map((a, idx) => `
+    contentArea.innerHTML = stockHtml + articles.map((a, idx) => `
       <div class="news-card">
         <div class="news-meta">
           <span class="source-tag">${escapeHtml(a.source)}</span>
@@ -599,10 +781,71 @@
     el("refreshPredictionBtn").addEventListener("click", loadPrediction);
   }
 
+  // ---------- Chatbot ----------
+  let chatHistory = [];
+  const chatFab = el("chatFab");
+  const chatPanel = el("chatPanel");
+  const chatMessages = el("chatMessages");
+  const chatInput = el("chatInput");
+
+  function toggleChat(open) {
+    chatPanel.classList.toggle("open", open);
+    if (open && !chatMessages.dataset.greeted) {
+      chatMessages.dataset.greeted = "1";
+      appendChatMsg("bot", "Hi! I'm your Market Pulse assistant. Ask me about any stock, sector, or market topic.");
+    }
+  }
+  chatFab.addEventListener("click", () => toggleChat(!chatPanel.classList.contains("open")));
+  el("chatCloseBtn").addEventListener("click", () => toggleChat(false));
+
+  function appendChatMsg(role, text, loading) {
+    const div = document.createElement("div");
+    div.className = `chat-msg ${role}${loading ? " loading" : ""}`;
+    div.textContent = text;
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return div;
+  }
+
+  async function sendChatMessage() {
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    chatInput.value = "";
+    appendChatMsg("user", msg);
+    chatHistory.push({ role: "user", content: msg });
+    const loadingEl = appendChatMsg("bot", "Thinking…", true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg, history: chatHistory.slice(-10), language: currentLang }),
+      });
+      const data = await res.json();
+      loadingEl.remove();
+      if (!res.ok || data.error) {
+        appendChatMsg("bot", `⚠️ ${data.error || "Something went wrong."}`);
+        return;
+      }
+      appendChatMsg("bot", data.reply);
+      chatHistory.push({ role: "model", content: data.reply });
+    } catch (e) {
+      loadingEl.remove();
+      appendChatMsg("bot", "⚠️ Could not reach the assistant. Please try again.");
+    }
+  }
+  el("chatSendBtn").addEventListener("click", sendChatMessage);
+  chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendChatMessage(); });
+
   // ---------- Init ----------
   loadTicker();
-  setInterval(loadTicker, 60000);
+  setInterval(loadTicker, 60000);          // auto-refresh market ticker every 60s
+  setInterval(() => renderTab(), 180000);  // auto-refresh current tab's content every 3 min
   setActiveTab("today");
+
+  window.addEventListener("load", () => {
+    setTimeout(() => el("splashScreen").classList.add("hide"), 900);
+  });
 })();
 </script>
 
