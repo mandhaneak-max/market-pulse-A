@@ -578,32 +578,44 @@
   // ---------- News (Today / Past / search) — also resolves a stock match ----------
   async function loadNews(query, days) {
     contentArea.innerHTML = '<div class="loading-state">Fetching headlines…</div>';
+
+    // News fetch — this alone determines whether the list renders.
+    let articles = [];
+    let newsFailed = false;
     try {
       const newsUrl = new URL(`${API_BASE}/api/news`, window.location.origin);
       if (query) newsUrl.searchParams.set("q", query);
       if (days) newsUrl.searchParams.set("days", days);
+      const res = await fetch(newsUrl);
+      const data = await res.json();
+      articles = data.articles || [];
+    } catch (e) {
+      newsFailed = true;
+    }
+    allArticles = articles;
+    contentBadge.textContent = articles.length;
 
-      const fetches = [fetch(newsUrl)];
-      if (query) {
+    // Stock lookup — fully independent; a timeout or failure here never hides news.
+    let stockData = null;
+    if (query) {
+      try {
         const stockUrl = new URL(`${API_BASE}/api/stock`, window.location.origin);
         stockUrl.searchParams.set("q", query);
-        fetches.push(fetch(stockUrl));
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const stockRes = await fetch(stockUrl, { signal: controller.signal });
+        clearTimeout(timer);
+        stockData = await stockRes.json();
+      } catch (e) {
+        stockData = null; // stock lookup timed out or failed — news still shows below
       }
-
-      const responses = await Promise.all(fetches);
-      const data = await responses[0].json();
-      allArticles = data.articles || [];
-      contentBadge.textContent = allArticles.length;
-
-      let stockData = null;
-      if (responses[1]) {
-        try { stockData = await responses[1].json(); } catch (e) { stockData = null; }
-      }
-
-      renderNews(allArticles, stockData);
-    } catch (e) {
-      contentArea.innerHTML = '<div class="empty-state">⚠️ Could not reach the news server. Try again shortly.</div>';
     }
+
+    if (newsFailed) {
+      contentArea.innerHTML = '<div class="empty-state">⚠️ Could not reach the news server. Try again shortly.</div>';
+      return;
+    }
+    renderNews(articles, stockData);
   }
 
   function renderStockCard(data) {
