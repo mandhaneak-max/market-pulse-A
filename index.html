@@ -635,11 +635,12 @@
 
   function renderStockMiniCard(item) {
     const q = item.quote;
+    const exch = item.exchange || "NSE";
     if (!q || q.price == null) {
       return `
         <div class="stock-mini-card">
           <div class="stock-mini-name" title="${escapeHtml(item.company_name)}">${escapeHtml(item.company_name)}</div>
-          <div class="stock-mini-sym">${escapeHtml(item.symbol)} · NSE</div>
+          <div class="stock-mini-sym">${escapeHtml(item.symbol)} · ${exch}</div>
           <div class="stock-mini-unavailable">Price unavailable</div>
         </div>`;
     }
@@ -650,21 +651,21 @@
     return `
       <div class="stock-mini-card">
         <div class="stock-mini-name" title="${escapeHtml(item.company_name)}">${escapeHtml(item.company_name)}</div>
-        <div class="stock-mini-sym">${escapeHtml(item.symbol)} · NSE</div>
+        <div class="stock-mini-sym">${escapeHtml(item.symbol)} · ${exch}</div>
         <div class="stock-mini-price">₹${fmtNum(q.price)}</div>
         <div class="stock-mini-change ${changeClass}">${sign}${fmtNum(q.change)} (${sign}${fmtNum(q.pct_change)}%) ${arrow}</div>
       </div>`;
   }
 
-  // Renders EVERY matching stock (not just the single best match) as a
-  // horizontal-scroll strip of price cards — e.g. searching "tata" shows
-  // Tata Motors, Tata Steel, TCS, Tata Power etc. all at once.
+  // Renders EVERY matching stock across NSE + BSE (not just the single best
+  // match) as a horizontal-scroll strip of price cards — e.g. searching
+  // "tata" shows Tata Motors, Tata Steel, TCS, Tata Power etc. all at once.
   function renderStockResults(data) {
     const results = (data && data.matched && Array.isArray(data.results)) ? data.results : [];
     if (!results.length) return "";
     return `
       <div class="stock-results-wrap">
-        <div class="stock-results-label">📈 Matching stocks (${results.length})</div>
+        <div class="stock-results-label">📈 Matching stocks — NSE &amp; BSE (${results.length})</div>
         <div class="stock-results-scroll">
           ${results.map(renderStockMiniCard).join("")}
         </div>
