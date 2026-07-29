@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0d47a1" />
 <title>SignalX</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='1' y='1' width='38' height='38' rx='9' fill='%230d47a1'/%3E%3Cpath d='M8 25.5 L14.5 18.5 L19.5 22.5 L27 12.5 L32.5 16.5' stroke='%23ff6d00' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='32.5' cy='16.5' r='3' fill='%2369f0ae'/%3E%3C/svg%3E" />
 
 <style>
   :root{
@@ -47,7 +47,7 @@
     gap:14px; transition: opacity .5s ease, visibility .5s ease;
   }
   .splash.hide{ opacity:0; visibility:hidden; pointer-events:none; }
-  .splash-icon{ font-size:42px; }
+  .splash-logo{ display:block; }
   .splash-title{ color:#fff; font-size:22px; font-weight:700; letter-spacing:0.3px; }
   .splash-sub{ color: rgba(255,255,255,0.6); font-size:12.5px; }
   .splash-dot{ width:8px; height:8px; border-radius:50%; background:#69f0ae; box-shadow:0 0 8px #69f0ae; animation: pulse 1.2s ease-in-out infinite; }
@@ -59,11 +59,19 @@
     padding: calc(10px + var(--safe-top)) 14px 0;
   }
   .brand-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
-  .brand-left{ display:flex; align-items:center; gap:8px; }
-  .brand-badge{ background: var(--orange); color:#fff; font-size:10px; font-weight:700; padding:3px 7px; border-radius:4px; }
-  .brand-name{ font-size:14.5px; font-weight:650; color:#fff; }
+  .brand-left{ display:flex; align-items:center; gap:9px; }
+  .brand-logo{ display:block; flex-shrink:0; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.25)); }
+  .brand-name{ font-size:15px; font-weight:700; color:#fff; letter-spacing:0.2px; }
   .live-dot{ width:7px; height:7px; border-radius:50%; background:#69f0ae; box-shadow:0 0 6px #69f0ae; display:inline-block; }
+  .header-right{ display:flex; align-items:center; gap:10px; }
   .clock{ font-size:10px; color: rgba(255,255,255,0.55); }
+  .refresh-header-btn{
+    width:28px; height:28px; border-radius:50%; border:1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.12); color:#fff; font-size:14px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; line-height:1; padding:0;
+  }
+  .refresh-header-btn:active{ background: rgba(255,255,255,0.25); }
+  .refresh-header-btn.spinning span{ display:inline-block; animation: spin 0.8s linear infinite; }
 
   .search-bar{
     background: rgba(255,255,255,0.13); border:1px solid rgba(255,255,255,0.2);
@@ -230,6 +238,7 @@
 
   .empty-state, .loading-state{ text-align:center; color: var(--text-dim); font-size:13px; padding:40px 20px; }
   .footer-note{ text-align:center; font-size:11px; color: var(--text-faint); padding: 18px 24px 4px; line-height:1.5; }
+  .dev-credit{ text-align:center; font-size:10.5px; color: var(--text-faint); opacity:0.75; padding: 2px 24px 10px; }
 
   /* ---------- Stock lookup card ---------- */
   .stock-card{
@@ -323,7 +332,11 @@
 <body>
 
 <div class="splash" id="splashScreen">
-  <div class="splash-icon">📈</div>
+  <svg class="splash-logo" viewBox="0 0 40 40" width="46" height="46" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect x="1" y="1" width="38" height="38" rx="11" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)"/>
+    <path d="M8 25.5 L14.5 18.5 L19.5 22.5 L27 12.5 L32.5 16.5" stroke="#ff6d00" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="32.5" cy="16.5" r="2.6" fill="#69f0ae"/>
+  </svg>
   <div class="splash-title">SignalX</div>
   <div class="splash-sub" id="splashSub">SignalX, powered by AI</div>
   <div class="splash-dot"></div>
@@ -332,11 +345,26 @@
 <div class="header">
   <div class="brand-row">
     <div class="brand-left">
-      <span class="brand-badge">SX</span>
+      <svg class="brand-logo" viewBox="0 0 40 40" width="28" height="28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="1" y="1" width="38" height="38" rx="11" fill="url(#logoGrad)"/>
+        <path d="M8 25.5 L14.5 18.5 L19.5 22.5 L27 12.5 L32.5 16.5" stroke="#ff6d00" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="32.5" cy="16.5" r="2.6" fill="#69f0ae"/>
+        <defs>
+          <linearGradient id="logoGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#1a237e"/>
+            <stop offset="1" stop-color="#0d47a1"/>
+          </linearGradient>
+        </defs>
+      </svg>
       <span class="brand-name">SignalX</span>
       <span class="live-dot"></span>
     </div>
-    <span class="clock" id="clock"></span>
+    <div class="header-right">
+      <span class="clock" id="clock"></span>
+      <button class="refresh-header-btn" id="headerRefreshBtn" aria-label="Refresh">
+        <span id="headerRefreshIcon">↻</span>
+      </button>
+    </div>
   </div>
 
   <div class="search-wrap">
@@ -385,16 +413,42 @@
   <div class="quick-search-wrap">
     <div class="section-title" id="quickSearchLabel">More Quick Searches</div>
     <div class="chip2-row" id="stockChips">
-      <button class="chip2" data-q="adani">🏗️ Adani</button>
-      <button class="chip2" data-q="tata motors tata steel tcs">🚗 Tata</button>
-      <button class="chip2" data-q="hdfc bank">🏦 HDFC</button>
+      <button class="chip2" data-q="adani enterprises adani ports">🏗️ Adani</button>
+      <button class="chip2" data-q="tata motors tata steel tcs tata power">🚗 Tata</button>
+      <button class="chip2" data-q="hdfc bank hdfc life">🏦 HDFC</button>
       <button class="chip2" data-q="infosys">💻 Infosys</button>
-      <button class="chip2" data-q="sbi">🏦 SBI</button>
+      <button class="chip2" data-q="sbi sbi life">🏦 SBI</button>
       <button class="chip2" data-q="maruti suzuki">🚗 Maruti</button>
+      <button class="chip2" data-q="icici bank icici lombard">🏦 ICICI</button>
+      <button class="chip2" data-q="axis bank">🏦 Axis Bank</button>
+      <button class="chip2" data-q="kotak mahindra bank">🏦 Kotak</button>
+      <button class="chip2" data-q="bajaj finance bajaj finserv">💰 Bajaj</button>
+      <button class="chip2" data-q="wipro">💻 Wipro</button>
+      <button class="chip2" data-q="hcl technologies">💻 HCL Tech</button>
+      <button class="chip2" data-q="tech mahindra">💻 Tech Mahindra</button>
+      <button class="chip2" data-q="larsen toubro">🏗️ L&amp;T</button>
+      <button class="chip2" data-q="itc">🚬 ITC</button>
+      <button class="chip2" data-q="hindustan unilever">🧴 HUL</button>
+      <button class="chip2" data-q="sun pharma dr reddy cipla">💊 Pharma</button>
+      <button class="chip2" data-q="asian paints">🎨 Asian Paints</button>
+      <button class="chip2" data-q="titan">💍 Titan</button>
+      <button class="chip2" data-q="bharti airtel vodafone idea">📡 Telecom</button>
+      <button class="chip2" data-q="zomato eternal">🍔 Zomato</button>
+      <button class="chip2" data-q="paytm">💳 Paytm</button>
+      <button class="chip2" data-q="nykaa">💄 Nykaa</button>
+      <button class="chip2" data-q="irctc">🚆 IRCTC</button>
+      <button class="chip2" data-q="dmart avenue supermarts">🛒 DMart</button>
+      <button class="chip2" data-q="ntpc power grid">⚡ Power</button>
+      <button class="chip2" data-q="coal india ongc">⛏️ Energy PSU</button>
+      <button class="chip2" data-q="jsw steel tata steel hindalco">🏭 Metals</button>
+      <button class="chip2" data-q="dlf godrej properties oberoi realty">🏢 Realty</button>
+      <button class="chip2" data-q="indigo interglobe aviation">✈️ IndiGo</button>
+      <button class="chip2" data-q="lic life insurance">📄 LIC</button>
       <button class="chip2" data-q="mutual funds sip">💼 Mutual Funds</button>
       <button class="chip2" data-q="fii fpi foreign investors">🌍 FII/FPI Data</button>
       <button class="chip2" data-q="inflation cpi wpi">📉 Inflation</button>
       <button class="chip2" data-q="nse">📋 NSE News</button>
+      <button class="chip2" data-q="bse sensex">📋 BSE News</button>
     </div>
   </div>
 
@@ -412,6 +466,7 @@
     illustrative summaries. Sector/stock impact estimates and predictions are
     <strong>not</strong> financial advice — always do your own research before investing.
   </div>
+  <div class="dev-credit">Developed by Atharv Mandhne</div>
 </main>
 
 <button class="stock-fab" id="stockFab" aria-label="Search a stock">📈</button>
@@ -567,10 +622,11 @@
   });
 
   function renderTab() {
-    if (activeTab === "today") loadNews(searchQuery, null);
-    else if (activeTab === "past") loadNews(searchQuery, 7);
-    else if (activeTab === "upcoming") loadEvents();
-    else if (activeTab === "prediction") loadPrediction();
+    if (activeTab === "today") return loadNews(searchQuery, null);
+    if (activeTab === "past") return loadNews(searchQuery, 7);
+    if (activeTab === "upcoming") return loadEvents();
+    if (activeTab === "prediction") return loadPrediction();
+    return Promise.resolve();
   }
 
   // ---------- Search ----------
@@ -650,16 +706,20 @@
       const items = [
         ["Sensex", data.sensex, (v) => fmtNum(v)],
         ["Nifty", data.nifty, (v) => fmtNum(v)],
-        ["Gold", data.gold, (v) => v == null ? "—" : "₹" + fmtNum(v) + "/10g"],
-        ["USD/INR", data.usdinr, (v) => v == null ? "—" : "₹" + fmtNum(v)],
-        ["Crude", data.crude, (v) => v == null ? "—" : "$" + fmtNum(v)],
-        ["Silver", data.silver, (v) => v == null ? "—" : "₹" + fmtNum(v) + "/kg"],
-      ];
+        ["Gold", data.gold, (v) => "₹" + fmtNum(v) + "/10g"],
+        ["USD/INR", data.usdinr, (v) => "₹" + fmtNum(v)],
+        ["Crude", data.crude, (v) => "$" + fmtNum(v)],
+        ["Silver", data.silver, (v) => "₹" + fmtNum(v) + "/kg"],
+      ].filter(([, obj]) => obj && obj.value != null); // hide any tile we couldn't get real data for, instead of showing "—"
+      if (!items.length) {
+        el("tickerScroll").innerHTML = '<div class="loading-state" style="padding:0; font-size:12px;">Market data unavailable right now.</div>';
+        return;
+      }
       el("tickerScroll").innerHTML = items.map(([name, obj, fmt], i) => {
-        const dirClass = obj && obj.direction === "UP" ? "up" : obj && obj.direction === "DOWN" ? "down" : "";
-        const arrow = obj && obj.direction === "UP" ? " ↑" : obj && obj.direction === "DOWN" ? " ↓" : "";
+        const dirClass = obj.direction === "UP" ? "up" : obj.direction === "DOWN" ? "down" : "";
+        const arrow = obj.direction === "UP" ? " ↑" : obj.direction === "DOWN" ? " ↓" : "";
         const sep = i < items.length - 1 ? '<div class="tick-sep"></div>' : "";
-        return `<div class="tick"><span class="tick-name">${name}</span><span class="tick-val ${dirClass}">${fmt(obj ? obj.value : null)}${arrow}</span></div>${sep}`;
+        return `<div class="tick"><span class="tick-name">${name}</span><span class="tick-val ${dirClass}">${fmt(obj.value)}${arrow}</span></div>${sep}`;
       }).join("");
     } catch (e) {
       el("tickerScroll").innerHTML = '<div class="loading-state" style="padding:0;font-size:12px;">Market data unavailable right now.</div>';
@@ -1095,10 +1155,23 @@
     `).join("");
   }
 
+  // ---------- Manual refresh (header button) ----------
+  // No more auto-refresh timers — the user taps this whenever they want the
+  // latest ticker prices + current tab's content re-fetched.
+  const headerRefreshBtn = el("headerRefreshBtn");
+  async function manualRefresh() {
+    if (headerRefreshBtn.classList.contains("spinning")) return; // avoid stacking clicks
+    headerRefreshBtn.classList.add("spinning");
+    try {
+      await Promise.all([loadTicker(), renderTab()]);
+    } finally {
+      setTimeout(() => headerRefreshBtn.classList.remove("spinning"), 400);
+    }
+  }
+  headerRefreshBtn.addEventListener("click", manualRefresh);
+
   // ---------- Init ----------
   loadTicker();
-  setInterval(loadTicker, 5000);           // auto-refresh ticker every 5s (backend caches upstream calls for 60s regardless)
-  setInterval(() => renderTab(), 30000);   // auto-refresh current tab's content every 30s
   setActiveTab("today");
 
   window.addEventListener("load", () => {
