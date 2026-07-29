@@ -28,6 +28,7 @@ import feedparser
 from bs4 import BeautifulSoup
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
+from concurrent.futures import ThreadPoolExecutor
 
 # --------------------------------------------------------------------------
 # App setup
@@ -502,10 +503,16 @@ BSE_HEADERS = {
     "Origin": "https://www.bseindia.com",
     "Referer": "https://www.bseindia.com/",
 }
-BSE_TIMEOUT = 5
-
+BSE_TIMEOUT = 4  # kept short — this sits on the interactive search path, run in parallel with Yahoo below
 
 YAHOO_SEARCH_URL = "https://query1.finance.yahoo.com/v1/finance/search"
+SEARCH_TIMEOUT = 4  # short timeout for anything the user is actively waiting on while typing
+
+# Short-lived cache for network-augmented search results (BSE/Yahoo lookups),
+# keyed by lowercase query. Avoids repeating the same slow network search
+# seconds later when a user picks a suggestion right after typing it.
+SEARCH_CACHE_TTL = 300
+_search_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
 def _search_yahoo_stocks(q: str, limit: int = 8) -> list[dict]:
@@ -515,13 +522,15 @@ def _search_yahoo_stocks(q: str, limit: int = 8) -> list[dict]:
     most dependable layer when the NSE list and BSE search both come up empty
     (which happens often, since NSE/BSE frequently block cloud/datacenter IPs
     outright). Matches are tagged exchange="YAHOO:NSE"/"YAHOO:BSE" so the
-    quote-fetcher knows the returned symbol already has its .NS/.BO suffix."""
+    quote-fetcher knows the returned symbol already has its .NS/.BO suffix.
+    Uses a short timeout (this sits on the interactive search path, not the
+    12s general REQUEST_TIMEOUT used for background RSS/quote calls)."""
     try:
         resp = requests.get(
             YAHOO_SEARCH_URL,
             headers=YAHOO_HEADERS,
             params={"q": q, "quotesCount": 20, "newsCount": 0},
-            timeout=REQUEST_TIMEOUT,
+            timeout=SEARCH_TIMEOUT,
         )
         resp.raise_for_status()
         results = []
@@ -697,10 +706,17 @@ def fetch_equity_master(force: bool = False) -> None:
         # keep whatever was cached before (even if stale) rather than losing it
 
 
-def _search_equity_master(q: str, limit: int = 8) -> list[dict]:
-    """Search NSE's ~2,000-stock list first (fast, cached); top up with a live
-    BSE search for anything NSE doesn't have (BSE-only smaller-cap stocks),
-    so combined coverage spans both exchanges (~6,000-7,000 companies)."""
+def _search_equity_master(q: str, limit: int = 8, allow_network: bool = True) -> list[dict]:
+    """Search NSE's ~2,000-stock list first (in-memory, effectively instant).
+
+    allow_network=True (used for an actual stock lookup, not every keystroke)
+    additionally runs a BSE search + a Yahoo search IN PARALLEL — rather than
+    one after another — to top up results for BSE-only smaller-cap stocks,
+    and caches that network-augmented result for a few minutes so picking a
+    just-typed suggestion doesn't repeat the same slow lookup.
+
+    allow_network=False (used by the live autocomplete dropdown) never makes
+    a network call at all, so it stays instant while the user is typing."""
     fetch_equity_master()
     q_upper = q.strip().upper()
     if not q_upper:
@@ -718,20 +734,40 @@ def _search_equity_master(q: str, limit: int = 8) -> list[dict]:
             contains.append(entry)
     combined = (exact + starts + contains)[:limit]
 
-    if len(combined) < limit:
+    if not allow_network or len(combined) >= limit:
+        return combined[:limit]
+
+    cache_key = f"{q_upper}:{limit}"
+    cached = _search_cache.get(cache_key)
+    if cached and (time.time() - cached[0]) < SEARCH_CACHE_TTL:
         seen_names = {r["name"].lower() for r in combined}
-        for r in _search_bse(q, limit=limit - len(combined)):
+        for r in cached[1]:
+            if len(combined) >= limit:
+                break
             if r["name"].lower() not in seen_names:
                 combined.append(r)
                 seen_names.add(r["name"].lower())
+        return combined[:limit]
 
-    if len(combined) < limit:
-        seen_names = {r["name"].lower() for r in combined}
-        for r in _search_yahoo_stocks(q, limit=limit - len(combined)):
-            if r["name"].lower() not in seen_names:
-                combined.append(r)
-                seen_names.add(r["name"].lower())
+    # Run the BSE scrape and the Yahoo search AT THE SAME TIME instead of
+    # sequentially — this alone roughly halves worst-case latency (was
+    # BSE_TIMEOUT + a 12s Yahoo timeout back to back; now max(~4s, ~4s)).
+    need = limit - len(combined)
+    with ThreadPoolExecutor(max_workers=2) as pool:
+        bse_future = pool.submit(_search_bse, q, need)
+        yahoo_future = pool.submit(_search_yahoo_stocks, q, need)
+        bse_results = bse_future.result()
+        yahoo_results = yahoo_future.result()
 
+    network_results = []
+    seen_names = {r["name"].lower() for r in combined}
+    for r in bse_results + yahoo_results:
+        if r["name"].lower() not in seen_names:
+            network_results.append(r)
+            seen_names.add(r["name"].lower())
+
+    _search_cache[cache_key] = (time.time(), network_results)
+    combined.extend(network_results)
     return combined[:limit]
 
 
@@ -1231,11 +1267,14 @@ def api_stock_overview():
 
 @app.route("/api/stocks/search")
 def api_stocks_search():
-    """Autocomplete: search across NSE + BSE (~6,000-7,000 companies combined) by symbol or name."""
+    """Autocomplete: instant, in-memory NSE lookup only (no BSE/Yahoo network
+    calls — this fires on every keystroke, so it must stay fast). BSE-only
+    stocks still resolve fine when the user actually searches/selects one,
+    via _match_stock()'s network-augmented lookup used by /api/stock."""
     q = (request.args.get("q") or "").strip()
     if len(q) < 2:
         return jsonify({"results": []})
-    raw = _search_equity_master(q, limit=10)
+    raw = _search_equity_master(q, limit=10, allow_network=False)
     cleaned = [
         {
             "symbol": r["symbol"].split(".")[0],
