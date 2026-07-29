@@ -17,13 +17,11 @@ from __future__ import annotations
 import os
 import re
 import csv
-import io
 import json
 import time
 import hashlib
 import threading
 from datetime import datetime, timedelta, timezone
-from concurrent.futures import ThreadPoolExecutor
 
 import requests
 import feedparser
@@ -66,7 +64,7 @@ RSS_FEEDS = {
 }
 
 FETCH_INTERVAL_SECONDS = 300     # re-pull RSS feeds at most every 5 minutes
-MAX_STORED_ARTICLES = 500        # keep the last N articles as our "history"
+MAX_STORED_ARTICLES = 3000       # keep a much larger accumulated history
 REQUEST_TIMEOUT = 12
 
 # Free, unofficial Yahoo Finance "chart" endpoint — no API key required.
@@ -107,31 +105,23 @@ NSE_SESSION_TTL = 240  # re-warm cookies every 4 minutes
 _nse_session_cache = {"session": None, "time": 0.0}
 
 # Common Indian stocks the search bar / chips can resolve to an NSE symbol.
-# alias (lowercase) -> (NSE symbol, display name). This is checked FIRST
-# (fast, human-friendly short names) before falling back to the full NSE
-# master list below — add more any time, it's just a lookup table.
+# alias (lowercase) -> (NSE symbol, display name). Add more any time —
+# it's just a lookup table.
 STOCK_SYMBOLS = {
     "reliance": ("RELIANCE", "Reliance Industries"),
     "tcs": ("TCS", "Tata Consultancy Services"),
     "tata consultancy": ("TCS", "Tata Consultancy Services"),
     "tata motors": ("TATAMOTORS", "Tata Motors"),
     "tata steel": ("TATASTEEL", "Tata Steel"),
-    "tata power": ("TATAPOWER", "Tata Power"),
-    "tata consumer": ("TATACONSUM", "Tata Consumer Products"),
     "hdfc bank": ("HDFCBANK", "HDFC Bank"),
     "hdfc": ("HDFCBANK", "HDFC Bank"),
-    "hdfc life": ("HDFCLIFE", "HDFC Life Insurance"),
     "infosys": ("INFY", "Infosys"),
     "sbi": ("SBIN", "State Bank of India"),
     "state bank of india": ("SBIN", "State Bank of India"),
-    "sbi life": ("SBILIFE", "SBI Life Insurance"),
     "maruti": ("MARUTI", "Maruti Suzuki"),
     "maruti suzuki": ("MARUTI", "Maruti Suzuki"),
     "adani enterprises": ("ADANIENT", "Adani Enterprises"),
     "adani": ("ADANIENT", "Adani Enterprises"),
-    "adani ports": ("ADANIPORTS", "Adani Ports & SEZ"),
-    "adani green": ("ADANIGREEN", "Adani Green Energy"),
-    "adani power": ("ADANIPOWER", "Adani Power"),
     "icici bank": ("ICICIBANK", "ICICI Bank"),
     "icici": ("ICICIBANK", "ICICI Bank"),
     "axis bank": ("AXISBANK", "Axis Bank"),
@@ -145,276 +135,13 @@ STOCK_SYMBOLS = {
     "hul": ("HINDUNILVR", "Hindustan Unilever"),
     "kotak": ("KOTAKBANK", "Kotak Mahindra Bank"),
     "bajaj finance": ("BAJFINANCE", "Bajaj Finance"),
-    "bajaj finserv": ("BAJAJFINSV", "Bajaj Finserv"),
-    "bajaj auto": ("BAJAJ-AUTO", "Bajaj Auto"),
     "sun pharma": ("SUNPHARMA", "Sun Pharmaceutical Industries"),
     "ntpc": ("NTPC", "NTPC"),
     "ongc": ("ONGC", "Oil and Natural Gas Corporation"),
     "coal india": ("COALINDIA", "Coal India"),
     "asian paints": ("ASIANPAINT", "Asian Paints"),
     "titan": ("TITAN", "Titan Company"),
-    "hcl tech": ("HCLTECH", "HCL Technologies"),
-    "hcltech": ("HCLTECH", "HCL Technologies"),
-    "tech mahindra": ("TECHM", "Tech Mahindra"),
-    "power grid": ("POWERGRID", "Power Grid Corporation"),
-    "m&m": ("M&M", "Mahindra & Mahindra"),
-    "mahindra": ("M&M", "Mahindra & Mahindra"),
-    "jsw steel": ("JSWSTEEL", "JSW Steel"),
-    "dr reddy": ("DRREDDY", "Dr. Reddy's Laboratories"),
-    "cipla": ("CIPLA", "Cipla"),
-    "divis lab": ("DIVISLAB", "Divi's Laboratories"),
-    "eicher motors": ("EICHERMOT", "Eicher Motors"),
-    "grasim": ("GRASIM", "Grasim Industries"),
-    "hero motocorp": ("HEROMOTOCO", "Hero MotoCorp"),
-    "hindalco": ("HINDALCO", "Hindalco Industries"),
-    "indusind bank": ("INDUSINDBK", "IndusInd Bank"),
-    "britannia": ("BRITANNIA", "Britannia Industries"),
-    "apollo hospitals": ("APOLLOHOSP", "Apollo Hospitals"),
-    "shree cement": ("SHREECEM", "Shree Cement"),
-    "ultratech": ("ULTRACEMCO", "UltraTech Cement"),
-    "nestle": ("NESTLEIND", "Nestle India"),
-    "bpcl": ("BPCL", "Bharat Petroleum"),
-    "ioc": ("IOC", "Indian Oil Corporation"),
-    "indian oil": ("IOC", "Indian Oil Corporation"),
-    "vedanta": ("VEDL", "Vedanta"),
-    "ltimindtree": ("LTIM", "LTIMindtree"),
-    "pidilite": ("PIDILITIND", "Pidilite Industries"),
-    "zomato": ("ETERNAL", "Eternal (Zomato)"),
-    "paytm": ("PAYTM", "One97 Communications (Paytm)"),
-    "nykaa": ("NYKAA", "FSN E-Commerce (Nykaa)"),
-    "irctc": ("IRCTC", "IRCTC"),
-    "dmart": ("DMART", "Avenue Supermarts (DMart)"),
-    "yes bank": ("YESBANK", "Yes Bank"),
-    "pnb": ("PNB", "Punjab National Bank"),
-    "canara bank": ("CANBK", "Canara Bank"),
-    "bank of baroda": ("BANKBARODA", "Bank of Baroda"),
-    "idfc first": ("IDFCFIRSTB", "IDFC First Bank"),
-    "hindustan aeronautics": ("HAL", "Hindustan Aeronautics"),
-    "hal": ("HAL", "Hindustan Aeronautics"),
-    "bhel": ("BHEL", "Bharat Heavy Electricals"),
-    "bel": ("BEL", "Bharat Electronics"),
-    "zydus": ("ZYDUSLIFE", "Zydus Lifesciences"),
-    "lupin": ("LUPIN", "Lupin"),
-    "godrej consumer": ("GODREJCP", "Godrej Consumer Products"),
-    "dabur": ("DABUR", "Dabur India"),
-    "marico": ("MARICO", "Marico"),
-    "colgate": ("COLPAL", "Colgate-Palmolive India"),
-    "united spirits": ("MCDOWELL-N", "United Spirits"),
-    "vodafone idea": ("IDEA", "Vodafone Idea"),
-    "vi": ("IDEA", "Vodafone Idea"),
 }
-
-# --------------------------------------------------------------------------
-# Full NSE stock master list — ALL listed equities, straight from NSE's own
-# free, public, no-key-required CSV. This is what makes the search bar work
-# for literally any listed company, not just the curated aliases above.
-# Source: NSE India's official archives (the same file nseindia.com itself
-# publishes for "list of securities available for trading").
-# --------------------------------------------------------------------------
-
-NSE_EQUITY_LIST_URLS = [
-    "https://nsearchives.nseindia.com/content/equity/EQUITY_L.csv",
-    "https://archives.nseindia.com/content/equity/EQUITY_L.csv",
-]
-STOCK_MASTER_TTL = 24 * 3600  # the list of listed companies barely changes — refresh once a day
-
-_stock_master: list[dict] = []   # [{"symbol": "TCS", "name": "Tata Consultancy Services Limited"}, ...]
-_stock_master_time = 0.0
-_stock_master_lock = threading.Lock()
-
-
-def _load_stock_master(force: bool = False) -> None:
-    """Download NSE's official list of ALL listed equities (free CSV, no key).
-    Cached for STOCK_MASTER_TTL. Safe to call often — it no-ops when fresh."""
-    global _stock_master, _stock_master_time
-    now = time.time()
-    with _stock_master_lock:
-        if _stock_master and not force and (now - _stock_master_time) < STOCK_MASTER_TTL:
-            return
-
-    for url in NSE_EQUITY_LIST_URLS:
-        try:
-            resp = requests.get(url, headers=NSE_HEADERS, timeout=15)
-            resp.raise_for_status()
-            reader = csv.DictReader(io.StringIO(resp.text))
-            rows = []
-            for row in reader:
-                symbol = (row.get("SYMBOL") or "").strip()
-                name = (row.get("NAME OF COMPANY") or "").strip()
-                if symbol and name:
-                    rows.append({"symbol": symbol, "name": name})
-            if rows:
-                with _stock_master_lock:
-                    _stock_master = rows
-                    _stock_master_time = now
-                print(f"[market-pulse] Loaded {len(rows)} NSE-listed stocks from {url}")
-                return
-        except Exception as exc:
-            print(f"[market-pulse] WARNING: could not load NSE equity list from {url}: {exc}")
-
-    # Both sources failed — app keeps working fine on the curated STOCK_SYMBOLS
-    # aliases above (~90 well-known companies) until the next refresh attempt.
-    print("[market-pulse] WARNING: falling back to curated stock alias list only")
-
-
-# --------------------------------------------------------------------------
-# BSE (Bombay Stock Exchange) — free, public "list of scrips" endpoint.
-# This adds BSE-ONLY-listed companies (plenty of small/mid caps trade on
-# BSE but were never listed on NSE) to the search universe. For their live
-# prices we lean on Yahoo Finance's "<scripcode>.BO" symbols — the same
-# reliable fallback path already used for NSE stocks below — rather than
-# calling BSE's own unofficial quote API from a cloud server, which tends
-# to hit the same IP-blocking issues NSE's API does.
-# --------------------------------------------------------------------------
-
-BSE_SCRIP_LIST_URL = (
-    "https://api.bseindia.com/BseIndiaAPI/api/ListOfScrips/w"
-    "?Group=&Scripcode=&industry=&segment=Equity&status=Active"
-)
-BSE_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-                  "(KHTML, like Gecko) Chrome/124.0 Safari/537.36",
-    "Accept": "application/json, text/plain, */*",
-    "Referer": "https://www.bseindia.com/",
-    "Origin": "https://www.bseindia.com",
-}
-
-_bse_master: list[dict] = []   # [{"symbol": "...", "name": "...", "exchange": "BSE", "yahoo_symbol": "500325.BO"}]
-_bse_master_time = 0.0
-_bse_master_lock = threading.Lock()
-
-
-def _first(row: dict, *keys: str):
-    """Return the first present, non-empty value among several possible key
-    spellings — BSE's unofficial API doesn't have documented/stable field
-    casing, so we check a few known variants rather than assume one."""
-    for k in keys:
-        v = row.get(k)
-        if v not in (None, ""):
-            return v
-    return None
-
-
-def _load_bse_master(force: bool = False) -> None:
-    """Download BSE's official list of ALL active equity scrips (free, no key).
-    Best-effort: if BSE's response shape ever changes, this just logs a
-    warning and the app keeps working fine on NSE search/prices alone."""
-    global _bse_master, _bse_master_time
-    now = time.time()
-    with _bse_master_lock:
-        if _bse_master and not force and (now - _bse_master_time) < STOCK_MASTER_TTL:
-            return
-
-    try:
-        resp = requests.get(BSE_SCRIP_LIST_URL, headers=BSE_HEADERS, timeout=15)
-        resp.raise_for_status()
-        raw = resp.json()
-        rows = raw if isinstance(raw, list) else (raw.get("Table") or raw.get("data") or [])
-
-        # Skip companies already searchable via NSE, so e.g. "reliance"
-        # doesn't list the same company twice (once per exchange).
-        nse_names = {row["name"].strip().lower() for row in _stock_master} if _stock_master else set()
-
-        parsed = []
-        for row in rows or []:
-            code = _first(row, "SC_CODE", "SCRIP_CD", "Scrip_Cd", "scrip_cd", "ScripCode")
-            name = _first(row, "SC_NAME", "Scrip_Name", "scrip_name", "ScripName")
-            sym  = _first(row, "scrip_id", "SCRIP_ID", "ScripId", "Symbol") or code
-            if not code or not name:
-                continue
-            name = str(name).strip()
-            if name.lower() in nse_names:
-                continue  # already covered via the NSE list
-            parsed.append({
-                "symbol": str(sym).strip(),
-                "name": name,
-                "exchange": "BSE",
-                "yahoo_symbol": f"{code}.BO",
-            })
-
-        if parsed:
-            with _bse_master_lock:
-                _bse_master = parsed
-                _bse_master_time = now
-            print(f"[market-pulse] Loaded {len(parsed)} additional BSE-only listed stocks")
-            return
-    except Exception as exc:
-        print(f"[market-pulse] WARNING: could not load BSE scrip list: {exc}")
-
-    print("[market-pulse] WARNING: BSE stock list unavailable this cycle — NSE search still works fine")
-
-
-def _search_stocks(text: str, limit: int = 8) -> list[dict]:
-    """Search curated aliases + the full NSE list + the BSE-only list for
-    free text. Returns up to `limit` matches, best-first, each a dict with
-    symbol / company_name / exchange — so the search bar can resolve ANY
-    listed company on either exchange, not just a fixed few."""
-    q = (text or "").strip().lower()
-    if not q:
-        return []
-
-    _load_stock_master()  # NSE — no-op if already fresh
-    _load_bse_master()    # BSE — no-op if already fresh
-
-    results: list[dict] = []
-    seen: set[str] = set()
-
-    def _add(symbol: str, name: str, exchange: str, yahoo_symbol: str) -> None:
-        key = f"{exchange}:{symbol}"
-        if key not in seen:
-            seen.add(key)
-            results.append({
-                "symbol": symbol,
-                "company_name": name,
-                "exchange": exchange,
-                "yahoo_symbol": yahoo_symbol,
-            })
-
-    # 1) Curated short-name aliases first (all NSE) — best UX for "hdfc" etc.
-    if q in STOCK_SYMBOLS:
-        sym, name = STOCK_SYMBOLS[q]
-        _add(sym, name, "NSE", f"{sym}.NS")
-    for alias, (sym, name) in STOCK_SYMBOLS.items():
-        if len(results) >= limit:
-            return results[:limit]
-        if q in alias or alias in q:
-            _add(sym, name, "NSE", f"{sym}.NS")
-
-    # 2) Exact ticker match — NSE first, then BSE
-    if len(results) < limit:
-        for row in _stock_master:
-            if row["symbol"].lower() == q:
-                _add(row["symbol"], row["name"], "NSE", f"{row['symbol']}.NS")
-                break
-    if len(results) < limit:
-        for row in _bse_master:
-            if row["symbol"].lower() == q:
-                _add(row["symbol"], row["name"], "BSE", row["yahoo_symbol"])
-                break
-
-    # 3) Symbol-starts-with / company-name-contains — NSE then BSE
-    if len(results) < limit:
-        for row in _stock_master:
-            if len(results) >= limit:
-                break
-            sym_l, name_l = row["symbol"].lower(), row["name"].lower()
-            if sym_l.startswith(q) or q in name_l:
-                _add(row["symbol"], row["name"], "NSE", f"{row['symbol']}.NS")
-    if len(results) < limit:
-        for row in _bse_master:
-            if len(results) >= limit:
-                break
-            sym_l, name_l = row["symbol"].lower(), row["name"].lower()
-            if sym_l.startswith(q) or q in name_l:
-                _add(row["symbol"], row["name"], "BSE", row["yahoo_symbol"])
-
-    return results[:limit]
-
-
-# Warm both full stock lists in the background at startup so the very first
-# search doesn't have to wait for the CSV/JSON downloads.
-threading.Thread(target=_load_stock_master, daemon=True).start()
-threading.Thread(target=_load_bse_master, daemon=True).start()
 
 # --------------------------------------------------------------------------
 # In-memory storage (simple + zero-setup; swap for a DB later if you want
@@ -432,6 +159,19 @@ _ticker_cache_time = 0.0
 _prediction_cache: dict | None = None
 _prediction_cache_time = 0.0
 PREDICTION_CACHE_SECONDS = 900  # regenerate the AI market outlook at most every 15 min
+
+_company_overview_cache: dict[str, dict] = {}  # "symbol:language" -> {"text":, "time":}
+COMPANY_OVERVIEW_TTL = 24 * 3600  # a company's overview barely changes — cache for a day
+
+# NSE publishes a plain CSV of every listed equity (symbol + company name).
+# We pull this once a day and use it to resolve search queries against the
+# *entire* NSE universe (~2,000 stocks), instead of only the curated
+# STOCK_SYMBOLS shortlist above (which we still check first since it's faster
+# and covers common company nicknames the official list doesn't, e.g. "HDFC").
+EQUITY_LIST_URL = "https://nsearchives.nseindia.com/content/equity/EQUITY_L.csv"
+EQUITY_MASTER_TTL = 24 * 3600  # this list barely changes — refresh once a day
+_equity_master: dict[str, str] = {}   # SYMBOL -> Company Name
+_equity_master_time = 0.0
 
 
 # --------------------------------------------------------------------------
@@ -625,43 +365,74 @@ def _fetch_yahoo_equity_quote(nse_symbol: str, company_name: str | None = None) 
 
 
 def _match_stock(text: str) -> tuple[str | None, str | None]:
-    """Best single match across NSE + BSE (used by chat / simple lookups).
-    Returns (symbol, company_name) or (None, None)."""
-    matches = _search_stocks(text, limit=1)
-    if not matches:
+    """Match free text against a stock. Checks the curated STOCK_SYMBOLS shortlist
+    first (covers common nicknames like 'HDFC' -> HDFC Bank), then falls back to
+    NSE's full ~2,000-stock equity list. Returns (symbol, company_name) or (None, None)."""
+    q = (text or "").strip().lower()
+    if not q:
         return None, None
-    return matches[0]["symbol"], matches[0]["company_name"]
+    if q in STOCK_SYMBOLS:
+        return STOCK_SYMBOLS[q]
+    for alias, (symbol, name) in STOCK_SYMBOLS.items():
+        if alias in q or q in alias:
+            return symbol, name
+    matches = _search_equity_master(q, limit=1)
+    if matches:
+        return matches[0]["symbol"], matches[0]["name"]
+    return None, None
 
 
 def _fetch_stock_quote(symbol: str, company_name: str) -> dict | None:
-    """Best-effort NSE share quote: try NSE's own API (most accurate) then
-    Yahoo's '<symbol>.NS' (more reliable from a cloud server)."""
+    """Best-effort share quote: try NSE (most accurate) then Yahoo (more reliable from the cloud)."""
     quote = _fetch_nse_quote(symbol)
     if quote and quote.get("price") is not None:
         return quote
     return _fetch_yahoo_equity_quote(symbol, company_name)
 
 
-def _fetch_quote_for_match(entry: dict) -> dict | None:
-    """Exchange-aware quote fetch for a _search_stocks() result: NSE stocks
-    use the NSE->Yahoo('.NS') chain above; BSE-only stocks (not listed on
-    NSE at all) go straight to Yahoo's '<scripcode>.BO' symbol."""
-    if entry.get("exchange") == "BSE":
-        q = _fetch_yahoo_quote(entry["yahoo_symbol"])
-        if not q:
-            return None
-        pct = _pct_change(q["price"], q["prev_close"])
-        return {
-            "symbol": entry["symbol"],
-            "company_name": entry["company_name"],
-            "price": round(q["price"], 2),
-            "change": round(q["price"] - q["prev_close"], 2),
-            "pct_change": pct,
-            "day_high": None,
-            "day_low": None,
-            "prev_close": round(q["prev_close"], 2),
-        }
-    return _fetch_stock_quote(entry["symbol"], entry["company_name"])
+def fetch_equity_master(force: bool = False) -> None:
+    """Pull NSE's official list of every listed equity (~2,000 rows: symbol +
+    company name), cached for EQUITY_MASTER_TTL. This is what lets search
+    cover the whole NSE, not just the curated STOCK_SYMBOLS shortlist."""
+    global _equity_master, _equity_master_time
+    now = time.time()
+    if not force and _equity_master and (now - _equity_master_time) < EQUITY_MASTER_TTL:
+        return
+    try:
+        resp = requests.get(EQUITY_LIST_URL, headers=YAHOO_HEADERS, timeout=REQUEST_TIMEOUT)
+        resp.raise_for_status()
+        reader = csv.DictReader(resp.text.splitlines())
+        new_master = {}
+        for row in reader:
+            symbol = (row.get("SYMBOL") or "").strip().upper()
+            name = (row.get("NAME OF COMPANY") or "").strip()
+            if symbol and name:
+                new_master[symbol] = name
+        if new_master:
+            _equity_master = new_master
+            _equity_master_time = now
+            print(f"[market-pulse] loaded {len(new_master)} NSE-listed equities")
+    except Exception as exc:
+        print(f"[market-pulse] WARNING: failed to fetch NSE equity master list: {exc}")
+        # keep whatever was cached before (even if stale) rather than losing it
+
+
+def _search_equity_master(q: str, limit: int = 8) -> list[dict]:
+    """Search the full NSE equity list by symbol prefix or company-name substring."""
+    fetch_equity_master()
+    q_upper = q.strip().upper()
+    if not q_upper or not _equity_master:
+        return []
+    exact, starts, contains = [], [], []
+    for symbol, name in _equity_master.items():
+        name_upper = name.upper()
+        if symbol == q_upper:
+            exact.append({"symbol": symbol, "name": name})
+        elif symbol.startswith(q_upper) or name_upper.startswith(q_upper):
+            starts.append({"symbol": symbol, "name": name})
+        elif q_upper in symbol or q_upper in name_upper:
+            contains.append({"symbol": symbol, "name": name})
+    return (exact + starts + contains)[:limit]
 
 
 def _pct_change(price: float, prev_close: float) -> float:
@@ -706,22 +477,25 @@ def build_ticker() -> dict:
     else:
         result["usdinr"] = {"value": None, "change_pct": None, "direction": "FLAT"}
 
-    # Gold/silver futures are quoted in USD per troy ounce — convert to INR/gram
-    # (illustrative retail-style figures, not official bullion rates).
-    for name, per_grams in (("gold", 1), ("silver", 10)):
+    # Gold/silver futures are quoted in USD per troy ounce — convert to the
+    # units Indian retail/bullion prices are actually quoted in: gold per 10
+    # grams, silver per kilogram. (Still an illustrative COMEX-futures-based
+    # conversion, not an official local bullion-association rate.)
+    METAL_UNITS = {"gold": (10, "10g"), "silver": (1000, "kg")}
+    for name, (grams, unit_label) in METAL_UNITS.items():
         q = quotes.get(name)
         if q and usdinr_rate:
-            price_inr_per_gram = (q["price"] / TROY_OUNCE_IN_GRAMS) * usdinr_rate * per_grams
-            prev_inr_per_gram = (q["prev_close"] / TROY_OUNCE_IN_GRAMS) * usdinr_rate * per_grams
-            pct = _pct_change(price_inr_per_gram, prev_inr_per_gram)
+            price_inr = (q["price"] / TROY_OUNCE_IN_GRAMS) * usdinr_rate * grams
+            prev_inr = (q["prev_close"] / TROY_OUNCE_IN_GRAMS) * usdinr_rate * grams
+            pct = _pct_change(price_inr, prev_inr)
             result[name] = {
-                "value": round(price_inr_per_gram, 2),
+                "value": round(price_inr, 2),
                 "change_pct": pct,
                 "direction": _direction(pct),
-                "unit": f"INR/{per_grams}g",
+                "unit": f"INR/{unit_label}",
             }
         else:
-            result[name] = {"value": None, "change_pct": None, "direction": "FLAT", "unit": f"INR/{per_grams}g"}
+            result[name] = {"value": None, "change_pct": None, "direction": "FLAT", "unit": f"INR/{unit_label}"}
 
     result["updated_at"] = datetime.now(timezone.utc).isoformat()
     _ticker_cache = result
@@ -891,7 +665,10 @@ def call_gemini_chat(history: list, message: str, language: str, context_text: s
 
     system_text = (
         "You are the Market Pulse assistant — a friendly, plain-language guide to the Indian "
-        "stock market for retail investors. Keep answers concise and avoid heavy jargon. "
+        "stock market for retail investors. Keep answers concise (short paragraphs, a few "
+        "sentences) and avoid heavy jargon. Format for readability: use **bold** around key "
+        "numbers, stock names, and important terms, and use short '- ' bullet points when "
+        "listing more than two items. Don't overdo it — bold only what's genuinely important. "
         "You are not a licensed financial advisor; make clear that anything resembling a "
         "prediction or recommendation is illustrative only, not investment advice.\n\n"
         + data_note + "\n\n" + lang_instruction
@@ -909,6 +686,34 @@ def call_gemini_chat(history: list, message: str, language: str, context_text: s
         "system_instruction": {"parts": [{"text": system_text}]},
         "contents": contents,
     }
+    headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
+    resp = requests.post(GEMINI_URL, headers=headers, data=json.dumps(payload), timeout=30)
+    resp.raise_for_status()
+    body = resp.json()
+    try:
+        return body["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except (KeyError, IndexError, TypeError) as exc:
+        raise RuntimeError(f"Unexpected Gemini response shape: {body}") from exc
+
+
+def call_gemini_company_overview(symbol: str, name: str, language: str) -> str:
+    """Short, factual, plain-language overview of a company for someone who's never heard of it."""
+    if not GEMINI_API_KEY:
+        raise RuntimeError("GEMINI_API_KEY is not set on the server")
+
+    lang_instruction = (
+        "Write in simple Hinglish (Hindi+English mix, Roman script)."
+        if language == "hinglish" else "Write in simple, plain English."
+    )
+    prompt = (
+        f"Give a short, factual overview of the Indian company '{name}' (NSE symbol: {symbol}) "
+        "for a retail investor who has never heard of it. Cover what the company does, its "
+        "sector/industry, and 1-2 notable facts (e.g. market position, promoter group) only if "
+        "you're reasonably confident of them. Keep it to 3-5 sentences, plain language, no bullet "
+        "points, no markdown. If you're not confident about a specific figure (like exact revenue "
+        "or market cap), speak in general terms instead of inventing one. " + lang_instruction
+    )
+    payload = {"contents": [{"parts": [{"text": prompt}]}]}
     headers = {"Content-Type": "application/json", "x-goog-api-key": GEMINI_API_KEY}
     resp = requests.post(GEMINI_URL, headers=headers, data=json.dumps(payload), timeout=30)
     resp.raise_for_status()
@@ -1084,92 +889,76 @@ def api_prediction():
     return jsonify({k: v for k, v in prediction.items() if k != "_cache_key"})
 
 
+@app.route("/api/stock/overview")
+def api_stock_overview():
+    """AI-generated plain-language 'about this company' blurb, cached per symbol+language."""
+    symbol = (request.args.get("symbol") or "").strip().upper()
+    name = (request.args.get("name") or symbol).strip()
+    language = (request.args.get("language") or "english").strip().lower()
+    if not symbol:
+        return jsonify({"error": "'symbol' query param is required"}), 400
+
+    cache_key = f"{symbol}:{language}"
+    now = time.time()
+    cached = _company_overview_cache.get(cache_key)
+    if cached and (now - cached["time"]) < COMPANY_OVERVIEW_TTL:
+        return jsonify({"overview": cached["text"]})
+
+    try:
+        text = call_gemini_company_overview(symbol, name, language)
+    except requests.HTTPError as exc:
+        return jsonify({"error": f"Gemini API error: {exc.response.status_code} {exc.response.text[:300]}"}), 502
+    except Exception as exc:
+        return jsonify({"error": f"Overview failed: {exc}"}), 502
+
+    _company_overview_cache[cache_key] = {"text": text, "time": now}
+    return jsonify({"overview": text})
+
+
+@app.route("/api/stocks/search")
+def api_stocks_search():
+    """Autocomplete: search NSE's full ~2,000-stock equity list by symbol or company name."""
+    q = (request.args.get("q") or "").strip()
+    if len(q) < 2:
+        return jsonify({"results": []})
+    return jsonify({"results": _search_equity_master(q, limit=10)})
+
+
 @app.route("/api/stock")
 def api_stock():
     """
-    Look up shares by name/ticker against the FULL NSE + BSE universe
-    (~2000 NSE companies plus BSE-only-listed small/mid caps) and return
-    live quotes for every match — e.g. searching "tata" returns Tata
-    Motors, Tata Steel, Tata Power, Tata Consumer, TCS etc. all at once,
-    each with its own live price and which exchange it's quoted from.
-
-    Query params:
-      q     - stock name or keyword (e.g. "tata", "hdfc", "reliance")
-      limit - max number of matching companies to return (default 8, max 15)
+    Look up a share by name/ticker (matched against STOCK_SYMBOLS) and return
+    its live quote (NSE, falling back to Yahoo if NSE is unreachable) plus
+    recent related headlines.
+    Query params: q - stock name or keyword (e.g. "tata motors", "hdfc")
     """
     q = (request.args.get("q") or "").strip()
-    limit = request.args.get("limit", default=8, type=int)
-    limit = max(1, min(limit or 8, 15))
-
     if not q:
         return jsonify({"error": "'q' query param is required"}), 400
 
-    matches = _search_stocks(q, limit=limit)
-    if not matches:
-        return jsonify({"matched": False, "query": q, "count": 0, "results": [], "quote": None, "news": []})
+    matched_symbol, matched_name = _match_stock(q)
+    if not matched_symbol:
+        return jsonify({"matched": False, "quote": None, "news": []})
 
-    # Fetch quotes for every matched company in parallel so this stays fast
-    # even when a broad term (e.g. "bank") matches several companies.
-    with ThreadPoolExecutor(max_workers=min(8, len(matches))) as pool:
-        quotes = list(pool.map(_fetch_quote_for_match, matches))
+    quote = _fetch_stock_quote(matched_symbol, matched_name)
 
-    results = [
-        {
-            "symbol": m["symbol"],
-            "company_name": m["company_name"],
-            "exchange": m["exchange"],
-            "quote": quote,
-        }
-        for m, quote in zip(matches, quotes)
-    ]
-
-    # Related headlines for the single best/top match only, to keep this fast.
-    top = matches[0]
     fetch_all_feeds()
     with _lock:
         articles = list(_news_store.values())
-    needle = top["company_name"].lower().split()[0]
+    needle = matched_name.lower().split()[0]
     related = [
         a for a in articles
-        if top["company_name"].lower() in a["title"].lower() or needle in a["title"].lower()
+        if matched_name.lower() in a["title"].lower() or needle in a["title"].lower()
     ]
     related.sort(key=lambda a: a["published"], reverse=True)
 
     return jsonify({
         "matched": True,
-        "query": q,
-        "count": len(results),
-        "results": results,
-        # Back-compat top-level fields = best/first match
-        "symbol": top["symbol"],
-        "company_name": top["company_name"],
-        "exchange": top["exchange"],
-        "quote": results[0]["quote"] if results else None,
-        "news": related[:10],
+        "symbol": matched_symbol,
+        "company_name": matched_name,
+        "quote": quote,
+        "news": related[:25],
     })
-
-
-@app.route("/api/stocks/search")
-def api_stocks_search():
-    """
-    Lightweight autocomplete across NSE + BSE: matching company names/symbols
-    only, NO live price lookups (fast). Handy for a type-ahead dropdown.
-    Query params: q - partial stock name or symbol, limit - max results (default 10)
-    """
-    q = (request.args.get("q") or "").strip()
-    limit = request.args.get("limit", default=10, type=int)
-    limit = max(1, min(limit or 10, 25))
-
-    matches = _search_stocks(q, limit=limit)
-    return jsonify({
-        "query": q,
-        "count": len(matches),
-        "results": [
-            {"symbol": m["symbol"], "company_name": m["company_name"], "exchange": m["exchange"]}
-            for m in matches
-        ],
-    })
-
 
 
 @app.route("/api/chat", methods=["POST"])
@@ -1192,13 +981,12 @@ def api_chat():
         history = []
 
     context_lines = []
-    stock_matches = _search_stocks(message, limit=1)
-    if stock_matches:
-        top = stock_matches[0]
-        quote = _fetch_quote_for_match(top)
+    symbol, name = _match_stock(message)
+    if symbol:
+        quote = _fetch_stock_quote(symbol, name)
         if quote and quote.get("price") is not None:
             context_lines.append(
-                f"{top['company_name']} ({top['symbol']}, {top['exchange']}): last price ₹{quote['price']}, "
+                f"{name} ({symbol}): last price ₹{quote['price']}, "
                 f"change {quote.get('change')} ({quote.get('pct_change')}%), "
                 f"previous close ₹{quote.get('prev_close')}."
             )
