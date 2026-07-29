@@ -85,6 +85,14 @@ TICKER_SYMBOLS = {
     "gold": "GC=F",     # USD per troy ounce — converted to INR/gram below
     "silver": "SI=F",   # USD per troy ounce — converted to INR/10g below
 }
+# Futures contracts (GC=F/SI=F) occasionally go stale around contract
+# rollover; these FX-style spot tickers track the same metal price but
+# don't expire, so we try them FIRST and only fall back to the futures
+# symbol above if Yahoo has no data for the spot ticker either.
+METAL_SPOT_FALLBACK = {
+    "gold": "XAUUSD=X",
+    "silver": "XAGUSD=X",
+}
 TICKER_CACHE_SECONDS = 60
 TROY_OUNCE_IN_GRAMS = 31.1034768
 
@@ -116,17 +124,31 @@ STOCK_SYMBOLS = {
     "tata consultancy": ("TCS", "Tata Consultancy Services"),
     "tata motors": ("TATAMOTORS", "Tata Motors"),
     "tata steel": ("TATASTEEL", "Tata Steel"),
+    "tata power": ("TATAPOWER", "Tata Power"),
+    "tata consumer": ("TATACONSUM", "Tata Consumer Products"),
+    "tata elxsi": ("TATAELXSI", "Tata Elxsi"),
     "hdfc bank": ("HDFCBANK", "HDFC Bank"),
     "hdfc": ("HDFCBANK", "HDFC Bank"),
+    "hdfc life": ("HDFCLIFE", "HDFC Life Insurance"),
+    "hdfc amc": ("HDFCAMC", "HDFC Asset Management"),
     "infosys": ("INFY", "Infosys"),
     "sbi": ("SBIN", "State Bank of India"),
     "state bank of india": ("SBIN", "State Bank of India"),
+    "sbi life": ("SBILIFE", "SBI Life Insurance"),
+    "sbi cards": ("SBICARD", "SBI Cards & Payment Services"),
     "maruti": ("MARUTI", "Maruti Suzuki"),
     "maruti suzuki": ("MARUTI", "Maruti Suzuki"),
     "adani enterprises": ("ADANIENT", "Adani Enterprises"),
     "adani": ("ADANIENT", "Adani Enterprises"),
+    "adani ports": ("ADANIPORTS", "Adani Ports & SEZ"),
+    "adani green": ("ADANIGREEN", "Adani Green Energy"),
+    "adani power": ("ADANIPOWER", "Adani Power"),
+    "adani energy": ("ADANIENSOL", "Adani Energy Solutions"),
+    "ambuja": ("AMBUJACEM", "Ambuja Cements"),
     "icici bank": ("ICICIBANK", "ICICI Bank"),
     "icici": ("ICICIBANK", "ICICI Bank"),
+    "icici lombard": ("ICICIGI", "ICICI Lombard General Insurance"),
+    "icici prudential": ("ICICIPRULI", "ICICI Prudential Life Insurance"),
     "axis bank": ("AXISBANK", "Axis Bank"),
     "wipro": ("WIPRO", "Wipro"),
     "bharti airtel": ("BHARTIARTL", "Bharti Airtel"),
@@ -137,13 +159,111 @@ STOCK_SYMBOLS = {
     "hindustan unilever": ("HINDUNILVR", "Hindustan Unilever"),
     "hul": ("HINDUNILVR", "Hindustan Unilever"),
     "kotak": ("KOTAKBANK", "Kotak Mahindra Bank"),
+    "kotak bank": ("KOTAKBANK", "Kotak Mahindra Bank"),
     "bajaj finance": ("BAJFINANCE", "Bajaj Finance"),
+    "bajaj finserv": ("BAJAJFINSV", "Bajaj Finserv"),
+    "bajaj auto": ("BAJAJ-AUTO", "Bajaj Auto"),
+    "bajaj holdings": ("BAJAJHLDNG", "Bajaj Holdings & Investment"),
     "sun pharma": ("SUNPHARMA", "Sun Pharmaceutical Industries"),
     "ntpc": ("NTPC", "NTPC"),
     "ongc": ("ONGC", "Oil and Natural Gas Corporation"),
     "coal india": ("COALINDIA", "Coal India"),
     "asian paints": ("ASIANPAINT", "Asian Paints"),
     "titan": ("TITAN", "Titan Company"),
+    "hcl tech": ("HCLTECH", "HCL Technologies"),
+    "hcltech": ("HCLTECH", "HCL Technologies"),
+    "tech mahindra": ("TECHM", "Tech Mahindra"),
+    "power grid": ("POWERGRID", "Power Grid Corporation"),
+    "m&m": ("M&M", "Mahindra & Mahindra"),
+    "mahindra": ("M&M", "Mahindra & Mahindra"),
+    "jsw steel": ("JSWSTEEL", "JSW Steel"),
+    "jsw energy": ("JSWENERGY", "JSW Energy"),
+    "dr reddy": ("DRREDDY", "Dr. Reddy's Laboratories"),
+    "cipla": ("CIPLA", "Cipla"),
+    "divis lab": ("DIVISLAB", "Divi's Laboratories"),
+    "eicher motors": ("EICHERMOT", "Eicher Motors"),
+    "grasim": ("GRASIM", "Grasim Industries"),
+    "hero motocorp": ("HEROMOTOCO", "Hero MotoCorp"),
+    "hindalco": ("HINDALCO", "Hindalco Industries"),
+    "indusind bank": ("INDUSINDBK", "IndusInd Bank"),
+    "britannia": ("BRITANNIA", "Britannia Industries"),
+    "apollo hospitals": ("APOLLOHOSP", "Apollo Hospitals"),
+    "shree cement": ("SHREECEM", "Shree Cement"),
+    "ultratech": ("ULTRACEMCO", "UltraTech Cement"),
+    "nestle": ("NESTLEIND", "Nestle India"),
+    "bpcl": ("BPCL", "Bharat Petroleum"),
+    "ioc": ("IOC", "Indian Oil Corporation"),
+    "indian oil": ("IOC", "Indian Oil Corporation"),
+    "hpcl": ("HINDPETRO", "Hindustan Petroleum"),
+    "vedanta": ("VEDL", "Vedanta"),
+    "ltimindtree": ("LTIM", "LTIMindtree"),
+    "pidilite": ("PIDILITIND", "Pidilite Industries"),
+    "zomato": ("ETERNAL", "Eternal (Zomato)"),
+    "eternal": ("ETERNAL", "Eternal (Zomato)"),
+    "paytm": ("PAYTM", "One97 Communications (Paytm)"),
+    "nykaa": ("NYKAA", "FSN E-Commerce (Nykaa)"),
+    "irctc": ("IRCTC", "IRCTC"),
+    "dmart": ("DMART", "Avenue Supermarts (DMart)"),
+    "avenue supermarts": ("DMART", "Avenue Supermarts (DMart)"),
+    "yes bank": ("YESBANK", "Yes Bank"),
+    "pnb": ("PNB", "Punjab National Bank"),
+    "canara bank": ("CANBK", "Canara Bank"),
+    "bank of baroda": ("BANKBARODA", "Bank of Baroda"),
+    "idfc first": ("IDFCFIRSTB", "IDFC First Bank"),
+    "federal bank": ("FEDERALBNK", "Federal Bank"),
+    "au small finance": ("AUBANK", "AU Small Finance Bank"),
+    "hindustan aeronautics": ("HAL", "Hindustan Aeronautics"),
+    "hal": ("HAL", "Hindustan Aeronautics"),
+    "bhel": ("BHEL", "Bharat Heavy Electricals"),
+    "bel": ("BEL", "Bharat Electronics"),
+    "mazagon dock": ("MAZDOCK", "Mazagon Dock Shipbuilders"),
+    "zydus": ("ZYDUSLIFE", "Zydus Lifesciences"),
+    "lupin": ("LUPIN", "Lupin"),
+    "aurobindo pharma": ("AUROPHARMA", "Aurobindo Pharma"),
+    "biocon": ("BIOCON", "Biocon"),
+    "godrej consumer": ("GODREJCP", "Godrej Consumer Products"),
+    "godrej properties": ("GODREJPROP", "Godrej Properties"),
+    "dabur": ("DABUR", "Dabur India"),
+    "marico": ("MARICO", "Marico"),
+    "colgate": ("COLPAL", "Colgate-Palmolive India"),
+    "united spirits": ("MCDOWELL-N", "United Spirits"),
+    "varun beverages": ("VBL", "Varun Beverages"),
+    "vodafone idea": ("IDEA", "Vodafone Idea"),
+    "vi": ("IDEA", "Vodafone Idea"),
+    "dlf": ("DLF", "DLF"),
+    "oberoi realty": ("OBEROIRLTY", "Oberoi Realty"),
+    "indigo": ("INDIGO", "InterGlobe Aviation (IndiGo)"),
+    "interglobe": ("INDIGO", "InterGlobe Aviation (IndiGo)"),
+    "pi industries": ("PIIND", "PI Industries"),
+    "upl": ("UPL", "UPL"),
+    "siemens": ("SIEMENS", "Siemens"),
+    "abb india": ("ABB", "ABB India"),
+    "havells": ("HAVELLS", "Havells India"),
+    "voltas": ("VOLTAS", "Voltas"),
+    "trent": ("TRENT", "Trent"),
+    "page industries": ("PAGEIND", "Page Industries"),
+    "muthoot finance": ("MUTHOOTFIN", "Muthoot Finance"),
+    "chola finance": ("CHOLAFIN", "Cholamandalam Investment & Finance"),
+    "shriram finance": ("SHRIRAMFIN", "Shriram Finance"),
+    "lic": ("LICI", "Life Insurance Corporation of India"),
+    "life insurance corporation": ("LICI", "Life Insurance Corporation of India"),
+    "bosch": ("BOSCHLTD", "Bosch"),
+    "cummins": ("CUMMINSIND", "Cummins India"),
+    "ashok leyland": ("ASHOKLEY", "Ashok Leyland"),
+    "hero moto": ("HEROMOTOCO", "Hero MotoCorp"),
+    "tvs motor": ("TVSMOTOR", "TVS Motor Company"),
+    "bharat forge": ("BHARATFORG", "Bharat Forge"),
+    "gail": ("GAIL", "GAIL India"),
+    "sail": ("SAIL", "Steel Authority of India"),
+    "nmdc": ("NMDC", "NMDC"),
+    "nalco": ("NATIONALUM", "National Aluminium Company"),
+    "jindal steel": ("JINDALSTEL", "Jindal Steel & Power"),
+    "polycab": ("POLYCAB", "Polycab India"),
+    "dixon": ("DIXON", "Dixon Technologies"),
+    "persistent": ("PERSISTENT", "Persistent Systems"),
+    "coforge": ("COFORGE", "Coforge"),
+    "mphasis": ("MPHASIS", "Mphasis"),
+    "lti": ("LTIM", "LTIMindtree"),
 }
 
 # --------------------------------------------------------------------------
@@ -524,7 +644,26 @@ def _fetch_stock_quote(symbol: str, company_name: str, exchange: str = "NSE") ->
             "prev_close": round(q["prev_close"], 2),
         }
     if exchange == "BSE":
-        return _fetch_bse_quote(symbol, company_name)
+        quote = _fetch_bse_quote(symbol, company_name)
+        if quote and quote.get("price") is not None:
+            return quote
+        # BSE's own API is unofficial and often blocked from cloud servers —
+        # Yahoo indexes BSE scrips too via "<scripcode>.BO", so try that next
+        # rather than giving up and showing "price unavailable".
+        q = _fetch_yahoo_quote(f"{symbol}.BO")
+        if not q:
+            return None
+        pct = _pct_change(q["price"], q["prev_close"])
+        return {
+            "symbol": symbol,
+            "company_name": company_name,
+            "price": round(q["price"], 2),
+            "change": round(q["price"] - q["prev_close"], 2),
+            "pct_change": pct,
+            "day_high": None,
+            "day_low": None,
+            "prev_close": round(q["prev_close"], 2),
+        }
     quote = _fetch_nse_quote(symbol)
     if quote and quote.get("price") is not None:
         return quote
@@ -619,9 +758,14 @@ def build_ticker() -> dict:
     if _ticker_cache and (now - _ticker_cache_time) < TICKER_CACHE_SECONDS:
         return _ticker_cache
 
-    quotes = {name: _fetch_yahoo_quote(sym) for name, sym in TICKER_SYMBOLS.items() if name != "nifty"}
+    quotes = {name: _fetch_yahoo_quote(sym) for name, sym in TICKER_SYMBOLS.items() if name not in ("nifty", "gold", "silver")}
     # Nifty: prefer NSE's own official index feed (most accurate); Yahoo as fallback only.
     quotes["nifty"] = _fetch_nse_index("NIFTY 50") or _fetch_yahoo_quote(TICKER_SYMBOLS["nifty"])
+    # Gold/silver: try the non-expiring spot ticker first, then the futures
+    # contract as a second attempt — only genuinely give up (and let the
+    # frontend hide the tile) if both fail.
+    for metal in ("gold", "silver"):
+        quotes[metal] = _fetch_yahoo_quote(METAL_SPOT_FALLBACK[metal]) or _fetch_yahoo_quote(TICKER_SYMBOLS[metal])
     result = {}
 
     for name in ("sensex", "nifty", "crude"):
