@@ -4,7 +4,7 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0d47a1" />
-<title>Atharv's News</title>
+<title>SignalX</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
 
 <style>
@@ -78,6 +78,24 @@
     background: var(--orange); border:none; color:#fff; border-radius:50%;
     width:27px; height:27px; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;
   }
+
+  .search-wrap{ position:relative; margin-bottom:10px; }
+  .search-wrap .search-bar{ margin-bottom:0; }
+  .search-suggestions{
+    position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:40;
+    background: var(--card); border:1px solid var(--border); border-radius:12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.14); overflow:hidden; display:none;
+    max-height:260px; overflow-y:auto;
+  }
+  .search-suggestions.open{ display:block; }
+  .suggestion-item{
+    padding:9px 13px; font-size:12.5px; color: var(--text); cursor:pointer; display:flex; justify-content:space-between; gap:8px;
+    border-bottom:1px solid var(--border);
+  }
+  .suggestion-item:last-child{ border-bottom:none; }
+  .suggestion-item:hover, .suggestion-item:active{ background: var(--bg); }
+  .suggestion-item .sname{ font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .suggestion-item .ssym{ color: var(--text-faint); font-size:11px; flex-shrink:0; }
 
   .tabs-row{ display:flex; gap:4px; padding-bottom:10px; overflow-x:auto; scrollbar-width:none; }
   .tabs-row::-webkit-scrollbar{ display:none; }
@@ -213,21 +231,7 @@
   .empty-state, .loading-state{ text-align:center; color: var(--text-dim); font-size:13px; padding:40px 20px; }
   .footer-note{ text-align:center; font-size:11px; color: var(--text-faint); padding: 18px 24px 4px; line-height:1.5; }
 
-  /* ---------- Multi-stock results strip ---------- */
-  .stock-results-wrap{ margin-bottom:14px; }
-  .stock-results-label{ font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color: var(--text-dim); margin-bottom:8px; }
-  .stock-results-scroll{ display:flex; gap:10px; overflow-x:auto; scrollbar-width:none; padding-bottom:2px; }
-  .stock-results-scroll::-webkit-scrollbar{ display:none; }
-  .stock-mini-card{ background: var(--card); border:1px solid var(--border); border-radius:12px; padding:12px 14px; min-width:150px; flex-shrink:0; }
-  .stock-mini-name{ font-size:12px; font-weight:700; color: var(--text); line-height:1.3; margin-bottom:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:170px; }
-  .stock-mini-sym{ font-size:10px; color: var(--text-faint); margin-bottom:6px; }
-  .stock-mini-price{ font-size:16px; font-weight:750; }
-  .stock-mini-change{ font-size:11.5px; font-weight:650; margin-top:2px; }
-  .stock-mini-change.up{ color: var(--green); }
-  .stock-mini-change.down{ color: var(--red); }
-  .stock-mini-unavailable{ font-size:11px; color: var(--text-faint); font-style:italic; }
-
-  /* ---------- Stock lookup card (single, e.g. from chat context) ---------- */
+  /* ---------- Stock lookup card ---------- */
   .stock-card{
     background: var(--card); border:1px solid var(--border); border-radius: var(--radius);
     padding:16px; margin-bottom:16px; border-left:3px solid var(--navy-1);
@@ -268,6 +272,13 @@
   .chat-msg.user{ background: var(--navy-1); color:#fff; align-self:flex-end; border-bottom-right-radius:3px; }
   .chat-msg.bot{ background: var(--bg); color: var(--text); align-self:flex-start; border-bottom-left-radius:3px; }
   .chat-msg.bot.loading{ color: var(--text-faint); font-style:italic; }
+  .chat-msg p{ margin:0 0 6px; }
+  .chat-msg p:last-child{ margin-bottom:0; }
+  .chat-msg ul{ margin:0 0 6px; padding-left:16px; }
+  .chat-msg ul:last-child{ margin-bottom:0; }
+  .chat-msg li{ margin-bottom:2px; }
+  .chat-msg b{ color: var(--navy-1); }
+  .chat-msg.user b{ color:#fff; }
   .chat-input-row{ display:flex; gap:6px; padding:10px; border-top:1px solid var(--border); }
   .chat-input-row input{
     flex:1; border:1px solid var(--border); border-radius:20px; padding:9px 13px; font-size:12.5px; outline:none;
@@ -276,31 +287,65 @@
     background: var(--orange); color:#fff; border:none; border-radius:50%;
     width:34px; height:34px; font-size:14px; cursor:pointer; flex-shrink:0;
   }
+
+  /* ---------- Stock-search widget (sits directly above the chat FAB) ---------- */
+  .stock-fab{
+    position:fixed; bottom:82px; right:18px; z-index:60;
+    width:52px; height:52px; border-radius:50%; border:none;
+    background: linear-gradient(135deg, var(--navy-1), var(--blue-chip));
+    color:#fff; font-size:22px; cursor:pointer; box-shadow:0 4px 16px rgba(21,101,192,0.4);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .stock-panel{
+    position:fixed; bottom:144px; right:16px; z-index:60;
+    width:min(360px, calc(100vw - 32px)); height:min(520px, calc(100vh - 200px));
+    background: var(--card); border:1px solid var(--border); border-radius:16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18); display:none; flex-direction:column; overflow:hidden;
+  }
+  .stock-panel.open{ display:flex; }
+  .stock-panel-search{ position:relative; padding:10px 12px; border-bottom:1px solid var(--border); }
+  .stock-panel-search input{
+    width:100%; border:1px solid var(--border); border-radius:20px; padding:9px 13px; font-size:12.5px; outline:none;
+  }
+  .stock-panel-search .search-suggestions{ left:12px; right:12px; top:calc(100% + 2px); }
+  .stock-panel-body{ flex:1; overflow-y:auto; padding:14px; }
+  .stock-overview{ font-size:12.5px; line-height:1.6; color: var(--text); background: var(--bg); border-radius:10px; padding:11px; margin-bottom:14px; }
+  .stock-news-tabs{ display:flex; gap:6px; margin-bottom:10px; }
+  .stock-news-tab{ font-size:11.5px; font-weight:650; padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:transparent; color: var(--text-dim); cursor:pointer; }
+  .stock-news-tab.active{ background: var(--navy-1); color:#fff; border-color: var(--navy-1); }
+  .stock-news-item{ padding:9px 0; border-top:1px solid var(--border); }
+  .stock-news-item:first-child{ border-top:none; }
+  .stock-news-item .snsrc{ font-size:10.5px; color: var(--text-faint); margin-bottom:3px; }
+  .stock-news-item a{ font-size:12.5px; font-weight:600; text-decoration:none; color: var(--text); }
+  .stock-news-item a:hover{ color: var(--blue-chip); }
 </style>
 </head>
 <body>
 
 <div class="splash" id="splashScreen">
   <div class="splash-icon">📈</div>
-  <div class="splash-title">Atharv's News</div>
-  <div class="splash-sub" id="splashSub">Market Pulse, powered by AI</div>
+  <div class="splash-title">SignalX</div>
+  <div class="splash-sub" id="splashSub">SignalX, powered by AI</div>
   <div class="splash-dot"></div>
 </div>
 
 <div class="header">
   <div class="brand-row">
     <div class="brand-left">
-      <span class="brand-badge">AN</span>
-      <span class="brand-name">Atharv's News</span>
+      <span class="brand-badge">SX</span>
+      <span class="brand-name">SignalX</span>
       <span class="live-dot"></span>
     </div>
     <span class="clock" id="clock"></span>
   </div>
 
-  <div class="search-bar">
-    <span class="search-icon">🔍</span>
-    <input id="searchInput" type="text" placeholder="Search any stock, company, topic…" autocomplete="off" />
-    <button class="search-go" id="searchGoBtn">→</button>
+  <div class="search-wrap">
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input id="searchInput" type="text" placeholder="Search any stock, company, topic…" autocomplete="off" />
+      <button class="search-go" id="searchGoBtn">→</button>
+    </div>
+    <div class="search-suggestions" id="searchSuggestions"></div>
   </div>
 
   <div class="tabs-row" id="tabsRow">
@@ -337,25 +382,6 @@
 </div>
 
 <main>
-  <div class="action-grid">
-    <button class="action-btn" data-tab="today" style="border-left:3px solid var(--navy-1);">
-      <span class="icon">📰</span>
-      <div><div class="title" id="actTodayTitle">Today's News</div><div class="sub" id="actTodaySub">Live market update</div></div>
-    </button>
-    <button class="action-btn" data-tab="prediction" style="border-left:3px solid var(--green);">
-      <span class="icon">📊</span>
-      <div><div class="title" id="actPredTitle">Prediction</div><div class="sub" id="actPredSub">Sensex/Nifty outlook</div></div>
-    </button>
-    <button class="action-btn" data-tab="upcoming" style="border-left:3px solid var(--purple);">
-      <span class="icon">📅</span>
-      <div><div class="title" id="actUpTitle">Upcoming Events</div><div class="sub" id="actUpSub">RBI, IPO, Results</div></div>
-    </button>
-    <button class="action-btn" data-tab="past" style="border-left:3px solid var(--amber);">
-      <span class="icon">🕐</span>
-      <div><div class="title" id="actPastTitle">Past 7 Days</div><div class="sub" id="actPastSub">Last week recap</div></div>
-    </button>
-  </div>
-
   <div class="quick-search-wrap">
     <div class="section-title" id="quickSearchLabel">More Quick Searches</div>
     <div class="chip2-row" id="stockChips">
@@ -382,16 +408,31 @@
   </div>
 
   <div class="footer-note" id="footerNote">
-    Market Pulse aggregates public RSS headlines and uses Gemini AI to generate plain-language,
+    SignalX aggregates public RSS headlines and uses Gemini AI to generate plain-language,
     illustrative summaries. Sector/stock impact estimates and predictions are
     <strong>not</strong> financial advice — always do your own research before investing.
   </div>
 </main>
 
+<button class="stock-fab" id="stockFab" aria-label="Search a stock">📈</button>
+<div class="stock-panel" id="stockPanel">
+  <div class="chat-head">
+    <span>Stock Search</span>
+    <button id="stockCloseBtn">✕</button>
+  </div>
+  <div class="stock-panel-search">
+    <input id="stockPanelInput" type="text" placeholder="Type a stock or company name…" autocomplete="off" />
+    <div class="search-suggestions" id="stockPanelSuggestions"></div>
+  </div>
+  <div class="stock-panel-body" id="stockPanelBody">
+    <div class="empty-state">Search for any NSE-listed stock to see its live price, news, and a quick company overview.</div>
+  </div>
+</div>
+
 <button class="chat-fab" id="chatFab" aria-label="Open chat">💬</button>
 <div class="chat-panel" id="chatPanel">
   <div class="chat-head">
-    <span id="chatHeadTitle">Atharv's News Assistant</span>
+    <span id="chatHeadTitle">SignalX Assistant</span>
     <button id="chatCloseBtn">✕</button>
   </div>
   <div class="chat-messages" id="chatMessages"></div>
@@ -457,7 +498,7 @@
       langHint: "| AI summaries below use this language",
       searchPlaceholder: "Search any stock, company, topic…",
       chatPlaceholder: "Ask about any stock or market topic…",
-      footer: 'Market Pulse aggregates public RSS headlines and uses Gemini AI to generate plain-language, illustrative summaries. Sector/stock impact estimates and predictions are <strong>not</strong> financial advice — always do your own research before investing.',
+      footer: 'SignalX aggregates public RSS headlines and uses Gemini AI to generate plain-language, illustrative summaries. Sector/stock impact estimates and predictions are <strong>not</strong> financial advice — always do your own research before investing.',
       today: "Today's News", past: "Past 7 Days", upcoming: "Upcoming Events", prediction: "Market Prediction",
     },
     hinglish: {
@@ -470,7 +511,7 @@
       langHint: "| Neeche ke AI summaries is language mein aayenge",
       searchPlaceholder: "Koi bhi stock, company, ya topic search karein…",
       chatPlaceholder: "Kisi bhi stock ya market topic ke baare mein poochein…",
-      footer: 'Market Pulse public RSS headlines collect karta hai aur Gemini AI se plain-language, illustrative summaries banata hai. Sector/stock impact estimates aur predictions <strong>financial advice nahi hain</strong> — invest karne se pehle apni research zaroor karein.',
+      footer: 'SignalX public RSS headlines collect karta hai aur Gemini AI se plain-language, illustrative summaries banata hai. Sector/stock impact estimates aur predictions <strong>financial advice nahi hain</strong> — invest karne se pehle apni research zaroor karein.',
       today: "Aaj ki News", past: "Pichle 7 Din", upcoming: "Aane Wale Events", prediction: "Market Prediction",
     },
   };
@@ -481,14 +522,6 @@
     el("tabLabelPast").textContent = t.tabPast;
     el("tabLabelUpcoming").textContent = t.tabUpcoming;
     el("tabLabelPrediction").textContent = t.tabPrediction;
-    el("actTodayTitle").textContent = t.actTodayTitle;
-    el("actTodaySub").textContent = t.actTodaySub;
-    el("actPredTitle").textContent = t.actPredTitle;
-    el("actPredSub").textContent = t.actPredSub;
-    el("actUpTitle").textContent = t.actUpTitle;
-    el("actUpSub").textContent = t.actUpSub;
-    el("actPastTitle").textContent = t.actPastTitle;
-    el("actPastSub").textContent = t.actPastSub;
     el("quickSearchLabel").textContent = t.quickSearchLabel;
     el("langHintText").textContent = t.langHint;
     el("footerNote").innerHTML = t.footer;
@@ -550,19 +583,63 @@
     contentTitle.textContent = searchQuery ? `Results for "${searchQuery}"` : TAB_TITLES[activeTab];
     loadNews(searchQuery, activeTab === "past" ? 7 : null);
   }
-  el("searchGoBtn").addEventListener("click", runSearch);
-  searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") runSearch(); });
+  el("searchGoBtn").addEventListener("click", () => { hideSuggestions(); runSearch(); });
+  searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { hideSuggestions(); runSearch(); } });
   searchInput.addEventListener("input", () => {
     clearTimeout(searchDebounce);
     searchDebounce = setTimeout(runSearch, 400);
+    clearTimeout(suggestDebounce);
+    suggestDebounce = setTimeout(() => loadSuggestions(searchInput.value.trim()), 250);
   });
 
   // Sector chips + quick-search chips both just set the search box and search
   document.querySelectorAll("[data-q]").forEach((btn) => {
     btn.addEventListener("click", () => {
+      hideSuggestions();
       searchInput.value = btn.dataset.q;
       runSearch();
     });
+  });
+
+  // ---------- Stock name/ticker autocomplete (covers the full ~2,000-stock NSE list) ----------
+  let suggestDebounce = null;
+  const suggestBox = el("searchSuggestions");
+
+  function hideSuggestions() {
+    suggestBox.classList.remove("open");
+    suggestBox.innerHTML = "";
+  }
+
+  async function loadSuggestions(query) {
+    if (query.length < 2) { hideSuggestions(); return; }
+    try {
+      const url = new URL(`${API_BASE}/api/stocks/search`, window.location.origin);
+      url.searchParams.set("q", query);
+      const res = await fetch(url);
+      const data = await res.json();
+      const results = data.results || [];
+      if (!results.length) { hideSuggestions(); return; }
+      suggestBox.innerHTML = results.map((r) => `
+        <div class="suggestion-item" data-symbol="${escapeHtml(r.symbol)}" data-name="${escapeHtml(r.name)}">
+          <span class="sname">${escapeHtml(r.name)}</span>
+          <span class="ssym">${escapeHtml(r.symbol)}</span>
+        </div>
+      `).join("");
+      suggestBox.classList.add("open");
+      suggestBox.querySelectorAll(".suggestion-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          searchInput.value = item.dataset.name;
+          hideSuggestions();
+          runSearch();
+        });
+      });
+    } catch (e) {
+      hideSuggestions();
+    }
+  }
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".search-wrap")) hideSuggestions();
   });
 
   // ---------- Ticker ----------
@@ -573,10 +650,10 @@
       const items = [
         ["Sensex", data.sensex, (v) => fmtNum(v)],
         ["Nifty", data.nifty, (v) => fmtNum(v)],
-        ["Gold", data.gold, (v) => v == null ? "—" : "₹" + fmtNum(v) + "/g"],
+        ["Gold", data.gold, (v) => v == null ? "—" : "₹" + fmtNum(v) + "/10g"],
         ["USD/INR", data.usdinr, (v) => v == null ? "—" : "₹" + fmtNum(v)],
         ["Crude", data.crude, (v) => v == null ? "—" : "$" + fmtNum(v)],
-        ["Silver", data.silver, (v) => v == null ? "—" : "₹" + fmtNum(v) + "/10g"],
+        ["Silver", data.silver, (v) => v == null ? "—" : "₹" + fmtNum(v) + "/kg"],
       ];
       el("tickerScroll").innerHTML = items.map(([name, obj, fmt], i) => {
         const dirClass = obj && obj.direction === "UP" ? "up" : obj && obj.direction === "DOWN" ? "down" : "";
@@ -615,9 +692,8 @@
       try {
         const stockUrl = new URL(`${API_BASE}/api/stock`, window.location.origin);
         stockUrl.searchParams.set("q", query);
-        stockUrl.searchParams.set("limit", "8");
         const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(), 12000);
+        const timer = setTimeout(() => controller.abort(), 8000);
         const stockRes = await fetch(stockUrl, { signal: controller.signal });
         clearTimeout(timer);
         stockData = await stockRes.json();
@@ -633,15 +709,13 @@
     renderNews(articles, stockData);
   }
 
-  function renderStockMiniCard(item) {
-    const q = item.quote;
-    const exch = item.exchange || "NSE";
+  function renderStockCard(data) {
+    const q = data.quote;
     if (!q || q.price == null) {
       return `
-        <div class="stock-mini-card">
-          <div class="stock-mini-name" title="${escapeHtml(item.company_name)}">${escapeHtml(item.company_name)}</div>
-          <div class="stock-mini-sym">${escapeHtml(item.symbol)} · ${exch}</div>
-          <div class="stock-mini-unavailable">Price unavailable</div>
+        <div class="stock-card">
+          <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · NSE</span></div></div>
+          <div class="stock-unavailable">Live price temporarily unavailable — showing related news below.</div>
         </div>`;
     }
     const pct = q.pct_change || 0;
@@ -649,31 +723,20 @@
     const sign = pct >= 0 ? "+" : "";
     const arrow = pct >= 0 ? "▲" : "▼";
     return `
-      <div class="stock-mini-card">
-        <div class="stock-mini-name" title="${escapeHtml(item.company_name)}">${escapeHtml(item.company_name)}</div>
-        <div class="stock-mini-sym">${escapeHtml(item.symbol)} · ${exch}</div>
-        <div class="stock-mini-price">₹${fmtNum(q.price)}</div>
-        <div class="stock-mini-change ${changeClass}">${sign}${fmtNum(q.change)} (${sign}${fmtNum(q.pct_change)}%) ${arrow}</div>
-      </div>`;
-  }
-
-  // Renders EVERY matching stock across NSE + BSE (not just the single best
-  // match) as a horizontal-scroll strip of price cards — e.g. searching
-  // "tata" shows Tata Motors, Tata Steel, TCS, Tata Power etc. all at once.
-  function renderStockResults(data) {
-    const results = (data && data.matched && Array.isArray(data.results)) ? data.results : [];
-    if (!results.length) return "";
-    return `
-      <div class="stock-results-wrap">
-        <div class="stock-results-label">📈 Matching stocks — NSE &amp; BSE (${results.length})</div>
-        <div class="stock-results-scroll">
-          ${results.map(renderStockMiniCard).join("")}
+      <div class="stock-card">
+        <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · NSE</span></div></div>
+        <div class="stock-price">₹${fmtNum(q.price)}</div>
+        <div class="stock-change ${changeClass}">${sign}${fmtNum(q.change)} (${sign}${fmtNum(q.pct_change)}%) ${arrow}</div>
+        <div class="stock-meta-row">
+          <div>Day High<b>₹${fmtNum(q.day_high)}</b></div>
+          <div>Day Low<b>₹${fmtNum(q.day_low)}</b></div>
+          <div>Prev Close<b>₹${fmtNum(q.prev_close)}</b></div>
         </div>
       </div>`;
   }
 
   function renderNews(articles, stockData) {
-    const stockHtml = (stockData && stockData.matched) ? renderStockResults(stockData) : "";
+    const stockHtml = (stockData && stockData.matched) ? renderStockCard(stockData) : "";
 
     if (!articles.length) {
       contentArea.innerHTML = stockHtml || '<div class="empty-state">No news found. Try a different search term.</div>';
@@ -838,10 +901,36 @@
   chatFab.addEventListener("click", () => toggleChat(!chatPanel.classList.contains("open")));
   el("chatCloseBtn").addEventListener("click", () => toggleChat(false));
 
+  // Minimal, safe markdown-lite: escapes HTML first, then supports **bold**,
+  // "- " bullet lines, and line breaks — enough to make AI replies scannable
+  // without pulling in a full markdown library.
+  function formatChatText(raw) {
+    const escaped = escapeHtml(raw || "");
+    const lines = escaped.split("\n");
+    let html = "";
+    let inList = false;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
+        if (!inList) { html += "<ul>"; inList = true; }
+        html += `<li>${trimmed.slice(2)}</li>`;
+      } else {
+        if (inList) { html += "</ul>"; inList = false; }
+        if (trimmed) html += `<p>${trimmed}</p>`;
+      }
+    }
+    if (inList) html += "</ul>";
+    return html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  }
+
   function appendChatMsg(role, text, loading) {
     const div = document.createElement("div");
     div.className = `chat-msg ${role}${loading ? " loading" : ""}`;
-    div.textContent = text;
+    if (role === "bot" && !loading) {
+      div.innerHTML = formatChatText(text);
+    } else {
+      div.textContent = text;
+    }
     chatMessages.appendChild(div);
     chatMessages.scrollTop = chatMessages.scrollHeight;
     return div;
@@ -877,10 +966,139 @@
   el("chatSendBtn").addEventListener("click", sendChatMessage);
   chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendChatMessage(); });
 
+  // ---------- Stock-search widget ----------
+  const stockFab = el("stockFab");
+  const stockPanel = el("stockPanel");
+  const stockPanelInput = el("stockPanelInput");
+  const stockPanelBody = el("stockPanelBody");
+  const stockPanelSuggestBox = el("stockPanelSuggestions");
+  let stockPanelDebounce = null;
+  let stockNewsCache = [];
+
+  function toggleStockPanel(open) {
+    stockPanel.classList.toggle("open", open);
+    if (open) chatPanel.classList.remove("open"); // don't show both floating panels at once
+  }
+  stockFab.addEventListener("click", () => toggleStockPanel(!stockPanel.classList.contains("open")));
+  el("stockCloseBtn").addEventListener("click", () => toggleStockPanel(false));
+  chatFab.addEventListener("click", () => toggleStockPanel(false));
+
+  function hideStockSuggestions() {
+    stockPanelSuggestBox.classList.remove("open");
+    stockPanelSuggestBox.innerHTML = "";
+  }
+
+  stockPanelInput.addEventListener("input", () => {
+    clearTimeout(stockPanelDebounce);
+    const q = stockPanelInput.value.trim();
+    stockPanelDebounce = setTimeout(async () => {
+      if (q.length < 2) { hideStockSuggestions(); return; }
+      try {
+        const url = new URL(`${API_BASE}/api/stocks/search`, window.location.origin);
+        url.searchParams.set("q", q);
+        const res = await fetch(url);
+        const data = await res.json();
+        const results = data.results || [];
+        if (!results.length) { hideStockSuggestions(); return; }
+        stockPanelSuggestBox.innerHTML = results.map((r) => `
+          <div class="suggestion-item" data-symbol="${escapeHtml(r.symbol)}" data-name="${escapeHtml(r.name)}">
+            <span class="sname">${escapeHtml(r.name)}</span><span class="ssym">${escapeHtml(r.symbol)}</span>
+          </div>
+        `).join("");
+        stockPanelSuggestBox.classList.add("open");
+        stockPanelSuggestBox.querySelectorAll(".suggestion-item").forEach((item) => {
+          item.addEventListener("click", () => {
+            stockPanelInput.value = item.dataset.name;
+            hideStockSuggestions();
+            loadStockDetail(item.dataset.symbol, item.dataset.name);
+          });
+        });
+      } catch (e) { hideStockSuggestions(); }
+    }, 250);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".stock-panel-search")) hideStockSuggestions();
+  });
+
+  async function loadStockDetail(symbol, name) {
+    stockPanelBody.innerHTML = '<div class="loading-state"><span class="spinner"></span><br/><br/>Loading stock details…</div>';
+    try {
+      const stockUrl = new URL(`${API_BASE}/api/stock`, window.location.origin);
+      stockUrl.searchParams.set("q", name);
+      const overviewUrl = new URL(`${API_BASE}/api/stock/overview`, window.location.origin);
+      overviewUrl.searchParams.set("symbol", symbol);
+      overviewUrl.searchParams.set("name", name);
+      overviewUrl.searchParams.set("language", currentLang);
+
+      const [stockRes, overviewRes] = await Promise.allSettled([fetch(stockUrl), fetch(overviewUrl)]);
+
+      let stockData = { matched: false, quote: null, news: [] };
+      if (stockRes.status === "fulfilled") {
+        try { stockData = await stockRes.value.json(); } catch (e) {}
+      }
+      let overviewText = "";
+      if (overviewRes.status === "fulfilled") {
+        try {
+          const od = await overviewRes.value.json();
+          overviewText = od.overview || "";
+        } catch (e) {}
+      }
+
+      stockNewsCache = stockData.news || [];
+      renderStockDetail(name, symbol, stockData.quote, overviewText);
+    } catch (e) {
+      stockPanelBody.innerHTML = '<div class="empty-state">⚠️ Could not load this stock right now. Try again.</div>';
+    }
+  }
+
+  function renderStockDetail(name, symbol, quote, overviewText) {
+    const priceHtml = renderStockCard({ matched: true, company_name: name, symbol, quote });
+    const overviewHtml = overviewText
+      ? `<div class="stock-overview">${escapeHtml(overviewText)}</div>`
+      : `<div class="stock-overview">Company overview is unavailable right now.</div>`;
+
+    stockPanelBody.innerHTML = `
+      ${priceHtml}
+      ${overviewHtml}
+      <div class="stock-news-tabs">
+        <button class="stock-news-tab active" data-range="present">Present News</button>
+        <button class="stock-news-tab" data-range="past">Past News</button>
+      </div>
+      <div id="stockNewsList"></div>
+    `;
+    stockPanelBody.querySelectorAll(".stock-news-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        stockPanelBody.querySelectorAll(".stock-news-tab").forEach((b) => b.classList.toggle("active", b === btn));
+        renderStockNewsList(btn.dataset.range);
+      });
+    });
+    renderStockNewsList("present");
+  }
+
+  function renderStockNewsList(range) {
+    const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000; // present = last 3 days
+    const filtered = stockNewsCache.filter((a) => {
+      const t = new Date(a.published).getTime();
+      return range === "present" ? t >= cutoff : t < cutoff;
+    });
+    const list = el("stockNewsList");
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty-state" style="padding:20px 4px;">No ${range} news found for this stock.</div>`;
+      return;
+    }
+    list.innerHTML = filtered.map((a) => `
+      <div class="stock-news-item">
+        <div class="snsrc">${escapeHtml(a.source)} · ${timeAgo(a.published)}</div>
+        <a href="${a.link}" target="_blank" rel="noopener noreferrer">${escapeHtml(a.title)}</a>
+      </div>
+    `).join("");
+  }
+
   // ---------- Init ----------
   loadTicker();
-  setInterval(loadTicker, 60000);          // auto-refresh market ticker every 60s
-  setInterval(() => renderTab(), 180000);  // auto-refresh current tab's content every 3 min
+  setInterval(loadTicker, 5000);           // auto-refresh ticker every 5s (backend caches upstream calls for 60s regardless)
+  setInterval(() => renderTab(), 30000);   // auto-refresh current tab's content every 30s
   setActiveTab("today");
 
   window.addEventListener("load", () => {
