@@ -714,7 +714,7 @@
     if (!q || q.price == null) {
       return `
         <div class="stock-card">
-          <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · NSE</span></div></div>
+          <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · ${escapeHtml(data.exchange || "NSE")}</span></div></div>
           <div class="stock-unavailable">Live price temporarily unavailable — showing related news below.</div>
         </div>`;
     }
@@ -724,7 +724,7 @@
     const arrow = pct >= 0 ? "▲" : "▼";
     return `
       <div class="stock-card">
-        <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · NSE</span></div></div>
+        <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · ${escapeHtml(data.exchange || "NSE")}</span></div></div>
         <div class="stock-price">₹${fmtNum(q.price)}</div>
         <div class="stock-change ${changeClass}">${sign}${fmtNum(q.change)} (${sign}${fmtNum(q.pct_change)}%) ${arrow}</div>
         <div class="stock-meta-row">
@@ -1046,14 +1046,14 @@
       }
 
       stockNewsCache = stockData.news || [];
-      renderStockDetail(name, symbol, stockData.quote, overviewText);
+      renderStockDetail(stockData.company_name || name, stockData.symbol || symbol, stockData.exchange || "NSE", stockData.quote, overviewText);
     } catch (e) {
       stockPanelBody.innerHTML = '<div class="empty-state">⚠️ Could not load this stock right now. Try again.</div>';
     }
   }
 
-  function renderStockDetail(name, symbol, quote, overviewText) {
-    const priceHtml = renderStockCard({ matched: true, company_name: name, symbol, quote });
+  function renderStockDetail(name, symbol, exchange, quote, overviewText) {
+    const priceHtml = renderStockCard({ matched: true, company_name: name, symbol, exchange, quote });
     const overviewHtml = overviewText
       ? `<div class="stock-overview">${escapeHtml(overviewText)}</div>`
       : `<div class="stock-overview">Company overview is unavailable right now.</div>`;
