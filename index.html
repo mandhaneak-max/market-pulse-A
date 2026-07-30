@@ -58,6 +58,7 @@
     background: linear-gradient(135deg, var(--navy-1), var(--navy-2));
     padding: calc(10px + var(--safe-top)) 14px 0;
   }
+  .top-credit{ text-align:center; font-size:10px; font-weight:600; color: rgba(255,255,255,0.55); letter-spacing:0.3px; padding-bottom:6px; }
   .brand-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .brand-left{ display:flex; align-items:center; gap:9px; }
   .brand-logo{ display:block; flex-shrink:0; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.25)); }
@@ -238,7 +239,6 @@
 
   .empty-state, .loading-state{ text-align:center; color: var(--text-dim); font-size:13px; padding:40px 20px; }
   .footer-note{ text-align:center; font-size:11px; color: var(--text-faint); padding: 18px 24px 4px; line-height:1.5; }
-  .dev-credit{ text-align:center; font-size:11px; font-weight:600; color: var(--text-dim); padding: 4px 24px 14px; letter-spacing:0.2px; }
 
   /* ---------- Stock lookup card ---------- */
   .stock-card{
@@ -343,6 +343,7 @@
 </div>
 
 <div class="header">
+  <div class="top-credit">Developed by Atharv Mandhne</div>
   <div class="brand-row">
     <div class="brand-left">
       <svg class="brand-logo" viewBox="0 0 40 40" width="28" height="28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
@@ -436,7 +437,6 @@
     illustrative summaries. Sector/stock impact estimates and predictions are
     <strong>not</strong> financial advice — always do your own research before investing.
   </div>
-  <div class="dev-credit">Developed by Atharv Mandhne</div>
 </main>
 
 <button class="stock-fab" id="stockFab" aria-label="Search a stock">📈</button>
