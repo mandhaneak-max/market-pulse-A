@@ -3,32 +3,30 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-<meta name="theme-color" content="#0b0f14" />
-<title>Market Pulse</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>📈</text></svg>" />
+<meta name="theme-color" content="#0d47a1" />
+<title>SignalX</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='1' y='1' width='38' height='38' rx='9' fill='%230d47a1'/%3E%3Cpath d='M8 25.5 L14.5 18.5 L19.5 22.5 L27 12.5 L32.5 16.5' stroke='%23ff6d00' stroke-width='3' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3Ccircle cx='32.5' cy='16.5' r='3' fill='%2369f0ae'/%3E%3C/svg%3E" />
 
 <style>
   :root{
-    --bg: #0b0f14;
-    --bg-elevated: #121821;
-    --card: #161d27;
-    --card-hover: #1c2531;
-    --border: #232c38;
-    --text: #e7edf3;
-    --text-dim: #93a1b0;
-    --text-faint: #5c6b7a;
-    --accent: #4da3ff;
-    --accent-dim: rgba(77,163,255,0.15);
-    --green: #33d17a;
-    --green-dim: rgba(51,209,122,0.14);
-    --red: #ff5c5c;
-    --red-dim: rgba(255,92,92,0.14);
-    --yellow: #f4c245;
+    --navy-1: #1a237e;
+    --navy-2: #0d47a1;
+    --blue-chip: #1565c0;
+    --orange: #ff6d00;
+    --green: #16a34a;
+    --red: #dc2626;
+    --purple: #7c3aed;
+    --amber: #b45309;
+    --bg: #f4f6f9;
+    --card: #ffffff;
+    --border: #e4e8ee;
+    --text: #16202c;
+    --text-dim: #64748b;
+    --text-faint: #94a3b8;
     --radius: 14px;
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
   }
-
   *{ box-sizing: border-box; }
   html,body{ margin:0; padding:0; }
   body{
@@ -39,312 +37,743 @@
     padding-bottom: calc(24px + var(--safe-bottom));
   }
   a{ color: inherit; }
+  button{ font-family: inherit; }
+
+  /* ---------- Splash screen ---------- */
+  .splash{
+    position:fixed; inset:0; z-index:999;
+    background: linear-gradient(135deg, var(--navy-1), var(--navy-2));
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; transition: opacity .5s ease, visibility .5s ease;
+  }
+  .splash.hide{ opacity:0; visibility:hidden; pointer-events:none; }
+  .splash-logo{ display:block; }
+  .splash-title{ color:#fff; font-size:22px; font-weight:700; letter-spacing:0.3px; }
+  .splash-sub{ color: rgba(255,255,255,0.6); font-size:12.5px; }
+  .splash-dot{ width:8px; height:8px; border-radius:50%; background:#69f0ae; box-shadow:0 0 8px #69f0ae; animation: pulse 1.2s ease-in-out infinite; }
+  @keyframes pulse{ 0%,100%{ opacity:1; transform:scale(1);} 50%{ opacity:.4; transform:scale(0.8);} }
 
   /* ---------- Header ---------- */
-  header{
-    position: sticky; top:0; z-index: 20;
-    background: rgba(11,15,20,0.92);
-    backdrop-filter: blur(10px);
-    border-bottom: 1px solid var(--border);
-    padding: calc(14px + var(--safe-top)) 16px 12px;
+  .header{
+    background: linear-gradient(135deg, var(--navy-1), var(--navy-2));
+    padding: calc(10px + var(--safe-top)) 14px 0;
   }
-  .brand{ display:flex; align-items:center; gap:10px; margin-bottom:12px; }
-  .brand .logo{
-    width:34px; height:34px; border-radius:10px;
-    background: linear-gradient(135deg, var(--accent), #7b5cff);
-    display:flex; align-items:center; justify-content:center;
-    font-size:18px; flex-shrink:0;
+  .bottom-credit{ text-align:center; font-size:10.5px; font-weight:600; color: var(--text-faint); letter-spacing:0.3px; padding:10px 0 4px; }
+  .brand-row{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .brand-left{ display:flex; align-items:center; gap:9px; }
+  .brand-logo{ display:block; flex-shrink:0; filter: drop-shadow(0 1px 3px rgba(0,0,0,0.25)); }
+  .brand-name{ font-size:15px; font-weight:700; color:#fff; letter-spacing:0.2px; }
+  .live-dot{ width:7px; height:7px; border-radius:50%; background:#69f0ae; box-shadow:0 0 6px #69f0ae; display:inline-block; }
+  .header-right{ display:flex; align-items:center; gap:10px; }
+  .clock{ font-size:10px; color: rgba(255,255,255,0.55); }
+  .refresh-header-btn{
+    width:28px; height:28px; border-radius:50%; border:1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.12); color:#fff; font-size:14px; cursor:pointer;
+    display:flex; align-items:center; justify-content:center; line-height:1; padding:0;
   }
-  .brand h1{ font-size:19px; margin:0; font-weight:700; letter-spacing:-0.2px; }
-  .brand p{ margin:0; font-size:11.5px; color: var(--text-dim); }
-  .brand-text{ flex:1; min-width:0; }
+  .refresh-header-btn:active{ background: rgba(255,255,255,0.25); }
+  .refresh-header-btn.spinning span{ display:inline-block; animation: spin 0.8s linear infinite; }
 
-  .lang-toggle{
-    display:flex; background: var(--bg-elevated); border:1px solid var(--border);
-    border-radius: 999px; padding:3px; flex-shrink:0;
+  .search-bar{
+    background: rgba(255,255,255,0.13); border:1px solid rgba(255,255,255,0.2);
+    border-radius: 22px; display:flex; align-items:center; padding:0 12px; gap:8px; margin-bottom:10px;
   }
-  .lang-toggle button{
-    border:none; background:transparent; color: var(--text-dim);
-    font-size:11.5px; font-weight:600; padding:6px 10px; border-radius:999px; cursor:pointer;
+  .search-bar input{
+    flex:1; background:transparent; border:none; outline:none; color:#fff; font-size:13.5px; padding:10px 0;
   }
-  .lang-toggle button.active{ background: var(--accent); color:#04121f; }
-
-  .search-row{ display:flex; gap:8px; }
-  .search-box{
-    flex:1; display:flex; align-items:center; gap:8px;
-    background: var(--bg-elevated); border:1px solid var(--border);
-    border-radius: 12px; padding:10px 12px;
-  }
-  .search-box input{
-    flex:1; border:none; outline:none; background:transparent; color:var(--text); font-size:14.5px;
-  }
-  .search-box input::placeholder{ color: var(--text-faint); }
-  .search-box svg{ flex-shrink:0; color: var(--text-faint); }
-  .clear-btn{
-    background:none; border:none; color:var(--text-faint); cursor:pointer; font-size:16px; padding:0 2px;
-    display:none;
+  .search-bar input::placeholder{ color: rgba(255,255,255,0.55); }
+  .search-icon{ opacity:.6; font-size:14px; }
+  .search-go{
+    background: var(--orange); border:none; color:#fff; border-radius:50%;
+    width:27px; height:27px; font-size:13px; cursor:pointer; display:flex; align-items:center; justify-content:center; flex-shrink:0;
   }
 
-  /* ---------- Layout ---------- */
-  main{ padding: 14px 16px 0; max-width: 720px; margin: 0 auto; }
-  section{ margin-bottom: 22px; }
+  .search-wrap{ position:relative; margin-bottom:10px; }
+  .search-wrap .search-bar{ margin-bottom:0; }
+  .search-suggestions{
+    position:absolute; top:calc(100% + 4px); left:0; right:0; z-index:40;
+    background: var(--card); border:1px solid var(--border); border-radius:12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.14); overflow:hidden; display:none;
+    max-height:260px; overflow-y:auto;
+  }
+  .search-suggestions.open{ display:block; }
+  .suggestion-item{
+    padding:9px 13px; font-size:12.5px; color: var(--text); cursor:pointer; display:flex; justify-content:space-between; gap:8px;
+    border-bottom:1px solid var(--border);
+  }
+  .suggestion-item:last-child{ border-bottom:none; }
+  .suggestion-item:hover, .suggestion-item:active{ background: var(--bg); }
+  .suggestion-item .sname{ font-weight:600; flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .suggestion-item .ssym{ color: var(--text-faint); font-size:11px; flex-shrink:0; }
+
+  .tabs-row{ display:flex; gap:4px; padding-bottom:10px; overflow-x:auto; scrollbar-width:none; }
+  .tabs-row::-webkit-scrollbar{ display:none; }
+  .tab-btn{
+    color: rgba(255,255,255,0.65); font-size:12px; font-weight:600; padding:6px 13px;
+    border-radius:20px; border:1px solid rgba(255,255,255,0.18); background: rgba(255,255,255,0.08);
+    cursor:pointer; white-space:nowrap; flex-shrink:0; transition: all .15s;
+  }
+  .tab-btn.active{ background:#fff; color: var(--navy-1); border-color:#fff; }
+
+  /* ---------- Quick sector/index chips ---------- */
+  .chips-strip{
+    background: var(--blue-chip); padding:8px 12px; display:flex; gap:6px; overflow-x:auto;
+    scrollbar-width:none; flex-wrap:nowrap;
+  }
+  .chips-strip::-webkit-scrollbar{ display:none; }
+  .chip{
+    color:#fff; font-size:11px; font-weight:500; padding:5px 11px; border-radius:20px;
+    border:1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.1);
+    cursor:pointer; white-space:nowrap; flex-shrink:0; transition: all .15s;
+  }
+  .chip:hover, .chip:active{ background: var(--orange); border-color: var(--orange); }
+
+  /* ---------- Language + hint bar ---------- */
+  .lang-bar{
+    background: var(--card); border-bottom:1px solid var(--border);
+    padding:7px 14px; display:flex; align-items:center; gap:6px;
+  }
+  .lang-btn{
+    font-size:11px; font-weight:600; padding:4px 10px; border-radius:20px;
+    border:1px solid var(--border); background:transparent; color: var(--text-dim); cursor:pointer;
+  }
+  .lang-btn.on{ background: var(--navy-1); color:#fff; border-color: var(--navy-1); }
+  .lang-hint{ font-size:11px; color: var(--text-faint); margin-left:2px; }
+
+  /* ---------- Ticker ---------- */
+  .ticker-bar{ background: var(--card); border-bottom:1px solid var(--border); padding:9px 14px; }
+  .ticker-scroll{ display:flex; gap:12px; overflow-x:auto; scrollbar-width:none; }
+  .ticker-scroll::-webkit-scrollbar{ display:none; }
+  .tick{ display:flex; flex-direction:column; gap:1px; flex-shrink:0; }
+  .tick-name{ font-size:10px; color: var(--text-faint); font-weight:600; }
+  .tick-val{ font-size:12.5px; font-weight:700; color: var(--text); }
+  .tick-val.up{ color: var(--green); }
+  .tick-val.down{ color: var(--red); }
+  .tick-sep{ width:1px; background: var(--border); flex-shrink:0; }
+
+  /* ---------- Main content ---------- */
+  main{ padding: 14px 14px 0; max-width: 720px; margin: 0 auto; }
+
+  .action-grid{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:18px; }
+  .action-btn{
+    background: var(--card); border:1px solid var(--border); border-radius:12px; padding:12px;
+    display:flex; align-items:center; gap:10px; cursor:pointer; text-align:left; transition: all .15s;
+  }
+  .action-btn:hover, .action-btn:active{ background:#f8fafc; }
+  .action-btn .icon{ font-size:20px; }
+  .action-btn .title{ font-weight:650; font-size:13px; }
+  .action-btn .sub{ font-size:11px; color: var(--text-dim); }
+
   .section-title{
-    display:flex; align-items:center; justify-content:space-between;
-    font-size:13px; font-weight:700; text-transform:uppercase; letter-spacing:0.6px;
-    color: var(--text-dim); margin-bottom:10px; padding:0 2px;
+    font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;
+    color: var(--text-dim); margin-bottom:9px;
   }
-  .section-title span.badge{
-    background: var(--accent-dim); color: var(--accent); border-radius: 999px;
-    padding:2px 8px; font-size:11px; text-transform:none; letter-spacing:0;
+  .quick-search-wrap{ margin-bottom:20px; }
+  .chip2-row{ display:flex; flex-wrap:wrap; gap:6px; }
+  .chip2{
+    font-size:12px; padding:5px 12px; border-radius:20px; border:1px solid var(--border);
+    background: var(--card); color: var(--text); cursor:pointer; transition: all .15s;
   }
+  .chip2:hover, .chip2:active{ background: var(--navy-1); color:#fff; border-color: var(--navy-1); }
 
-  /* ---------- Events ---------- */
-  .events-scroll{
-    display:flex; gap:10px; overflow-x:auto; padding: 2px 2px 6px;
-    scrollbar-width:none;
-  }
-  .events-scroll::-webkit-scrollbar{ display:none; }
-  .event-card{
-    flex: 0 0 auto; width:190px; background: var(--card); border:1px solid var(--border);
-    border-radius: var(--radius); padding:12px;
-  }
-  .event-card .cat{
-    display:inline-block; font-size:10.5px; font-weight:700; color: var(--accent);
-    background: var(--accent-dim); padding:3px 8px; border-radius:999px; margin-bottom:8px;
-  }
-  .event-card h4{ margin:0 0 6px; font-size:13.5px; line-height:1.3; }
-  .event-card p{ margin:0; font-size:11.5px; color: var(--text-dim); line-height:1.4; }
+  .content-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
+  .content-header h2{ font-size:15px; margin:0; }
+  .badge-count{ background: rgba(21,101,192,0.1); color: var(--blue-chip); font-size:11px; padding:2px 9px; border-radius:999px; }
 
   /* ---------- News cards ---------- */
   .news-card{
     background: var(--card); border:1px solid var(--border); border-radius: var(--radius);
-    padding:14px; margin-bottom:12px; transition: background .15s ease;
+    padding:14px; margin-bottom:12px;
   }
-  .news-meta{
-    display:flex; align-items:center; gap:8px; font-size:11.5px; color: var(--text-faint); margin-bottom:8px;
-  }
-  .source-tag{
-    font-weight:700; color: var(--accent); background: var(--accent-dim);
-    padding:2px 8px; border-radius:999px; font-size:10.5px;
-  }
-  .news-card h3{ margin:0 0 6px; font-size:15.5px; line-height:1.35; font-weight:650; }
+  .news-meta{ display:flex; align-items:center; gap:8px; font-size:11px; color: var(--text-faint); margin-bottom:7px; }
+  .source-tag{ font-weight:700; color: var(--blue-chip); background: rgba(21,101,192,0.1); padding:2px 8px; border-radius:999px; font-size:10.5px; }
+  .news-card h3{ margin:0 0 6px; font-size:15px; line-height:1.35; font-weight:650; }
   .news-card .summary{ margin:0 0 12px; font-size:13px; color: var(--text-dim); line-height:1.5; }
   .card-actions{ display:flex; gap:8px; align-items:center; }
-
-  .btn{
-    border:none; border-radius:10px; padding:9px 14px; font-size:12.5px; font-weight:650;
-    cursor:pointer; display:inline-flex; align-items:center; gap:6px;
-  }
-  .btn-primary{ background: var(--accent); color:#04121f; }
+  .btn{ border:none; border-radius:10px; padding:9px 14px; font-size:12.5px; font-weight:650; cursor:pointer; display:inline-flex; align-items:center; gap:6px; }
+  .btn-primary{ background: var(--orange); color:#fff; }
   .btn-primary:disabled{ opacity:0.6; cursor:default; }
-  .btn-link{ background:transparent; color: var(--text-dim); text-decoration:none; font-size:12px; padding:9px 4px;}
+  .btn-link{ background:transparent; color: var(--text-dim); text-decoration:none; font-size:12px; padding:9px 4px; }
 
-  /* ---------- AI analysis block ---------- */
   .ai-block{ margin-top:12px; padding-top:12px; border-top:1px dashed var(--border); display:none; }
   .ai-block.show{ display:block; }
   .ai-loading{ font-size:12.5px; color: var(--text-dim); display:flex; align-items:center; gap:8px; }
-  .spinner{
-    width:14px; height:14px; border-radius:50%; border:2px solid var(--border);
-    border-top-color: var(--accent); animation: spin 0.7s linear infinite;
-  }
+  .spinner{ width:14px; height:14px; border-radius:50%; border:2px solid var(--border); border-top-color: var(--orange); animation: spin 0.7s linear infinite; display:inline-block; }
   @keyframes spin{ to{ transform: rotate(360deg);} }
 
-  .sentiment-pill{
-    display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700;
-    padding:5px 11px; border-radius:999px; margin-bottom:10px;
-  }
-  .sentiment-Bullish{ background: var(--green-dim); color: var(--green); }
-  .sentiment-Bearish{ background: var(--red-dim); color: var(--red); }
-  .sentiment-Neutral{ background: rgba(244,194,69,0.14); color: var(--yellow); }
+  .sentiment-pill{ display:inline-flex; align-items:center; gap:6px; font-size:12px; font-weight:700; padding:5px 11px; border-radius:999px; margin-bottom:10px; }
+  .sentiment-Bullish{ background: rgba(22,163,74,0.1); color: var(--green); }
+  .sentiment-Bearish{ background: rgba(220,38,38,0.1); color: var(--red); }
+  .sentiment-Neutral{ background: rgba(180,83,9,0.1); color: var(--amber); }
 
   .ai-summary{ font-size:13.5px; line-height:1.55; color: var(--text); margin-bottom:12px; }
-
   .chip-row{ display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; }
-  .chip{
-    font-size:11.5px; font-weight:650; padding:5px 10px; border-radius:999px;
-    display:inline-flex; align-items:center; gap:4px;
-  }
-  .chip-UP{ background: var(--green-dim); color: var(--green); }
-  .chip-DOWN{ background: var(--red-dim); color: var(--red); }
-  .chip-NEUTRAL{ background: rgba(147,161,176,0.14); color: var(--text-dim); }
+  .impact-chip{ font-size:11.5px; font-weight:650; padding:5px 10px; border-radius:999px; display:inline-flex; align-items:center; gap:4px; }
+  .impact-UP{ background: rgba(22,163,74,0.1); color: var(--green); }
+  .impact-DOWN{ background: rgba(220,38,38,0.1); color: var(--red); }
+  .impact-NEUTRAL, .impact-FLAT{ background: rgba(100,116,139,0.1); color: var(--text-dim); }
 
   .stock-table{ width:100%; border-collapse:collapse; font-size:12.5px; margin-bottom:8px; }
-  .stock-table th{
-    text-align:left; color: var(--text-faint); font-weight:600; font-size:10.5px;
-    text-transform:uppercase; letter-spacing:0.4px; padding-bottom:6px;
-  }
+  .stock-table th{ text-align:left; color: var(--text-faint); font-weight:600; font-size:10.5px; text-transform:uppercase; letter-spacing:0.4px; padding-bottom:6px; }
   .stock-table td{ padding:7px 6px 7px 0; border-top:1px solid var(--border); }
   .stock-table td.ticker{ font-weight:700; }
   .stock-table td.change-UP{ color: var(--green); font-weight:700; }
   .stock-table td.change-DOWN{ color: var(--red); font-weight:700; }
   .stock-table td.change-NEUTRAL{ color: var(--text-dim); }
-
   .ai-disclaimer{ font-size:10.5px; color: var(--text-faint); font-style:italic; }
   .ai-error{ font-size:12.5px; color: var(--red); }
 
-  .empty-state, .loading-state{
-    text-align:center; color: var(--text-dim); font-size:13px; padding:40px 20px;
+  /* ---------- Events ---------- */
+  .event-card{ background: var(--card); border:1px solid var(--border); border-radius: var(--radius); padding:13px; margin-bottom:10px; border-left:3px solid var(--purple); }
+  .event-card .cat{ display:inline-block; font-size:10.5px; font-weight:700; color: var(--purple); background: rgba(124,58,237,0.1); padding:3px 8px; border-radius:999px; margin-bottom:8px; }
+  .event-card h4{ margin:0 0 6px; font-size:14px; }
+  .event-card p{ margin:0; font-size:12px; color: var(--text-dim); line-height:1.4; }
+
+  /* ---------- Prediction ---------- */
+  .prediction-card{ background: var(--card); border:1px solid var(--border); border-radius: var(--radius); padding:16px; margin-bottom:14px; }
+  .prediction-section{ margin-bottom:14px; }
+  .prediction-section h4{ margin:0 0 8px; font-size:12.5px; text-transform:uppercase; letter-spacing:0.4px; color: var(--text-dim); }
+  .risk-list{ margin:0; padding-left:18px; font-size:13px; color: var(--text); line-height:1.6; }
+  .refresh-row{ display:flex; justify-content:flex-end; margin-bottom:8px; }
+  .refresh-btn{ background:none; border:1px solid var(--border); color: var(--text-dim); border-radius:20px; padding:5px 12px; font-size:11.5px; cursor:pointer; }
+
+  .empty-state, .loading-state{ text-align:center; color: var(--text-dim); font-size:13px; padding:40px 20px; }
+  .footer-note{ text-align:center; font-size:11px; color: var(--text-faint); padding: 18px 24px 4px; line-height:1.5; }
+
+  /* ---------- Stock lookup card ---------- */
+  .stock-card{
+    background: var(--card); border:1px solid var(--border); border-radius: var(--radius);
+    padding:16px; margin-bottom:16px; border-left:3px solid var(--navy-1);
   }
-  .footer-note{
-    text-align:center; font-size:11px; color: var(--text-faint); padding: 18px 24px 4px; line-height:1.5;
+  .stock-card-head{ display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:10px; }
+  .stock-card-head h3{ margin:0 0 2px; font-size:16px; }
+  .stock-card-head .sym{ font-size:11.5px; color: var(--text-faint); font-weight:600; }
+  .stock-price{ font-size:24px; font-weight:750; }
+  .stock-change{ font-size:13px; font-weight:650; margin-top:2px; }
+  .stock-change.up{ color: var(--green); }
+  .stock-change.down{ color: var(--red); }
+  .stock-meta-row{ display:flex; gap:18px; margin-top:10px; font-size:11.5px; color: var(--text-dim); }
+  .stock-meta-row b{ color: var(--text); display:block; font-size:12.5px; }
+  .stock-unavailable{ font-size:12px; color: var(--text-faint); font-style:italic; }
+
+  /* ---------- Chatbot widget ---------- */
+  .chat-fab{
+    position:fixed; bottom:20px; right:18px; z-index:60;
+    width:52px; height:52px; border-radius:50%; border:none;
+    background: linear-gradient(135deg, var(--orange), #ff8f00);
+    color:#fff; font-size:22px; cursor:pointer; box-shadow:0 4px 16px rgba(255,109,0,0.4);
+    display:flex; align-items:center; justify-content:center;
   }
+  .chat-panel{
+    position:fixed; bottom:82px; right:16px; z-index:60;
+    width:min(340px, calc(100vw - 32px)); height:min(460px, calc(100vh - 140px));
+    background: var(--card); border:1px solid var(--border); border-radius:16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18); display:none; flex-direction:column; overflow:hidden;
+  }
+  .chat-panel.open{ display:flex; }
+  .chat-head{
+    background: linear-gradient(135deg, var(--navy-1), var(--navy-2)); color:#fff;
+    padding:12px 14px; font-size:13.5px; font-weight:650; display:flex; justify-content:space-between; align-items:center;
+  }
+  .chat-head button{ background:none; border:none; color:#fff; font-size:16px; cursor:pointer; opacity:0.8; }
+  .chat-messages{ flex:1; overflow-y:auto; padding:12px; display:flex; flex-direction:column; gap:10px; }
+  .chat-msg{ font-size:12.5px; line-height:1.5; padding:8px 11px; border-radius:12px; max-width:85%; }
+  .chat-msg.user{ background: var(--navy-1); color:#fff; align-self:flex-end; border-bottom-right-radius:3px; }
+  .chat-msg.bot{ background: var(--bg); color: var(--text); align-self:flex-start; border-bottom-left-radius:3px; }
+  .chat-msg.bot.loading{ color: var(--text-faint); font-style:italic; }
+  .chat-msg p{ margin:0 0 6px; }
+  .chat-msg p:last-child{ margin-bottom:0; }
+  .chat-msg ul{ margin:0 0 6px; padding-left:16px; }
+  .chat-msg ul:last-child{ margin-bottom:0; }
+  .chat-msg li{ margin-bottom:2px; }
+  .chat-msg b{ color: var(--navy-1); }
+  .chat-msg.user b{ color:#fff; }
+  .chat-input-row{ display:flex; gap:6px; padding:10px; border-top:1px solid var(--border); }
+  .chat-input-row input{
+    flex:1; border:1px solid var(--border); border-radius:20px; padding:9px 13px; font-size:12.5px; outline:none;
+  }
+  .chat-input-row button{
+    background: var(--orange); color:#fff; border:none; border-radius:50%;
+    width:34px; height:34px; font-size:14px; cursor:pointer; flex-shrink:0;
+  }
+
+  /* ---------- Stock-search widget (sits directly above the chat FAB) ---------- */
+  .stock-fab{
+    position:fixed; bottom:82px; right:18px; z-index:60;
+    width:52px; height:52px; border-radius:50%; border:none;
+    background: linear-gradient(135deg, var(--navy-1), var(--blue-chip));
+    color:#fff; font-size:22px; cursor:pointer; box-shadow:0 4px 16px rgba(21,101,192,0.4);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .stock-panel{
+    position:fixed; bottom:144px; right:16px; z-index:60;
+    width:min(360px, calc(100vw - 32px)); height:min(520px, calc(100vh - 200px));
+    background: var(--card); border:1px solid var(--border); border-radius:16px;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.18); display:none; flex-direction:column; overflow:hidden;
+  }
+  .stock-panel.open{ display:flex; }
+  .stock-panel-search{ position:relative; padding:10px 12px; border-bottom:1px solid var(--border); }
+  .stock-panel-search input{
+    width:100%; border:1px solid var(--border); border-radius:20px; padding:9px 13px; font-size:12.5px; outline:none;
+  }
+  .stock-panel-search .search-suggestions{ left:12px; right:12px; top:calc(100% + 2px); }
+  .stock-panel-body{ flex:1; overflow-y:auto; padding:14px; }
+  .stock-overview{ font-size:12.5px; line-height:1.6; color: var(--text); background: var(--bg); border-radius:10px; padding:11px; margin-bottom:14px; }
+  .stock-news-tabs{ display:flex; gap:6px; margin-bottom:10px; }
+  .stock-news-tab{ font-size:11.5px; font-weight:650; padding:5px 12px; border-radius:20px; border:1px solid var(--border); background:transparent; color: var(--text-dim); cursor:pointer; }
+  .stock-news-tab.active{ background: var(--navy-1); color:#fff; border-color: var(--navy-1); }
+  .stock-news-item{ padding:9px 0; border-top:1px solid var(--border); }
+  .stock-news-item:first-child{ border-top:none; }
+  .stock-news-item .snsrc{ font-size:10.5px; color: var(--text-faint); margin-bottom:3px; }
+  .stock-news-item a{ font-size:12.5px; font-weight:600; text-decoration:none; color: var(--text); }
+  .stock-news-item a:hover{ color: var(--blue-chip); }
 </style>
 </head>
 <body>
 
-<header>
-  <div class="brand">
-    <div class="logo">📈</div>
-    <div class="brand-text">
-      <h1>Market Pulse</h1>
-      <p>Financial news, explained simply</p>
+<div class="splash" id="splashScreen">
+  <svg class="splash-logo" viewBox="0 0 40 40" width="46" height="46" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+    <rect x="1" y="1" width="38" height="38" rx="11" fill="rgba(255,255,255,0.12)" stroke="rgba(255,255,255,0.35)"/>
+    <path d="M8 25.5 L14.5 18.5 L19.5 22.5 L27 12.5 L32.5 16.5" stroke="#ff6d00" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="32.5" cy="16.5" r="2.6" fill="#69f0ae"/>
+  </svg>
+  <div class="splash-title">SignalX</div>
+  <div class="splash-sub" id="splashSub">SignalX powered by Atharv</div>
+  <div class="splash-dot"></div>
+</div>
+
+<div class="header">
+  <div class="brand-row">
+    <div class="brand-left">
+      <svg class="brand-logo" viewBox="0 0 40 40" width="28" height="28" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <rect x="1" y="1" width="38" height="38" rx="11" fill="url(#logoGrad)"/>
+        <path d="M8 25.5 L14.5 18.5 L19.5 22.5 L27 12.5 L32.5 16.5" stroke="#ff6d00" stroke-width="2.6" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="32.5" cy="16.5" r="2.6" fill="#69f0ae"/>
+        <defs>
+          <linearGradient id="logoGrad" x1="0" y1="0" x2="40" y2="40" gradientUnits="userSpaceOnUse">
+            <stop stop-color="#1a237e"/>
+            <stop offset="1" stop-color="#0d47a1"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <span class="brand-name">SignalX</span>
+      <span class="live-dot"></span>
     </div>
-    <div class="lang-toggle" id="langToggle">
-      <button data-lang="english" class="active">EN</button>
-      <button data-lang="hinglish">Hinglish</button>
+    <div class="header-right">
+      <span class="clock" id="clock"></span>
+      <button class="refresh-header-btn" id="headerRefreshBtn" aria-label="Refresh">
+        <span id="headerRefreshIcon">↻</span>
+      </button>
     </div>
   </div>
 
-  <div class="search-row">
-    <div class="search-box">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input id="searchInput" type="text" placeholder="Search ticker, sector, or keyword…" autocomplete="off" />
-      <button class="clear-btn" id="clearBtn">✕</button>
+  <div class="search-wrap">
+    <div class="search-bar">
+      <span class="search-icon">🔍</span>
+      <input id="searchInput" type="text" placeholder="Search any stock, company, topic…" autocomplete="off" />
+      <button class="search-go" id="searchGoBtn">→</button>
     </div>
+    <div class="search-suggestions" id="searchSuggestions"></div>
   </div>
-</header>
+
+  <div class="tabs-row" id="tabsRow">
+    <button class="tab-btn active" data-tab="today"><span id="tabLabelToday">📰 Today</span></button>
+    <button class="tab-btn" data-tab="past"><span id="tabLabelPast">🕐 Past</span></button>
+    <button class="tab-btn" data-tab="upcoming"><span id="tabLabelUpcoming">📅 Upcoming</span></button>
+    <button class="tab-btn" data-tab="prediction"><span id="tabLabelPrediction">📊 Prediction</span></button>
+  </div>
+</div>
+
+<div class="chips-strip" id="sectorChips">
+  <button class="chip" data-q="sensex">📈 Sensex</button>
+  <button class="chip" data-q="nifty">📊 Nifty</button>
+  <button class="chip" data-q="reliance">🏭 Reliance</button>
+  <button class="chip" data-q="rbi">🏦 RBI</button>
+  <button class="chip" data-q="it sector">💻 IT</button>
+  <button class="chip" data-q="banking">🏦 Banks</button>
+  <button class="chip" data-q="gold">🪙 Gold</button>
+  <button class="chip" data-q="ipo">🆕 IPO</button>
+  <button class="chip" data-q="usd inr rupee">💱 USD/INR</button>
+  <button class="chip" data-q="crude oil">⛽ Oil</button>
+</div>
+
+<div class="lang-bar">
+  <button class="lang-btn on" id="langEn" data-lang="english">🇬🇧 EN</button>
+  <button class="lang-btn" id="langHi" data-lang="hinglish">🇮🇳 HI</button>
+  <span class="lang-hint" id="langHintText">| AI summaries below use this language</span>
+</div>
+
+<div class="ticker-bar">
+  <div class="ticker-scroll" id="tickerScroll">
+    <div class="loading-state" style="padding:0; font-size:12px;">Loading market data…</div>
+  </div>
+</div>
 
 <main>
-  <section id="eventsSection">
-    <div class="section-title">📅 Upcoming Market Events</div>
-    <div class="events-scroll" id="eventsScroll">
-      <div class="loading-state" style="width:100%;">Loading events…</div>
+  <div class="quick-search-wrap">
+    <div class="section-title" id="quickSearchLabel">More Quick Searches</div>
+    <div class="chip2-row" id="stockChips">
+      <button class="chip2" data-q="reliance industries">🏭 Reliance</button>
+      <button class="chip2" data-q="hdfc bank">🏦 HDFC Bank</button>
+      <button class="chip2" data-q="tcs">💻 TCS</button>
+      <button class="chip2" data-q="infosys">💻 Infosys</button>
+      <button class="chip2" data-q="sbi">🏦 SBI</button>
+      <button class="chip2" data-q="mutual funds sip">💼 Mutual Funds</button>
     </div>
-  </section>
-
-  <section id="newsSection">
-    <div class="section-title">
-      <span id="newsTitle">Latest News</span>
-      <span class="badge" id="newsCountBadge">–</span>
-    </div>
-    <div id="newsList">
-      <div class="loading-state">Fetching the latest headlines…</div>
-    </div>
-  </section>
-
-  <div class="footer-note">
-    Market Pulse aggregates public RSS headlines and uses Gemini AI to generate plain-language,
-    illustrative summaries. Sector/stock impact estimates are <strong>not</strong> financial advice —
-    always do your own research before investing.
   </div>
+
+  <div class="content-header">
+    <h2 id="contentTitle">Today's News</h2>
+    <span class="badge-count" id="contentBadge">–</span>
+  </div>
+
+  <div id="contentArea">
+    <div class="loading-state">Loading…</div>
+  </div>
+
+  <div class="footer-note" id="footerNote">
+    SignalX aggregates public RSS headlines and uses Gemini AI to generate plain-language,
+    illustrative summaries. Sector/stock impact estimates and predictions are
+    <strong>not</strong> financial advice — always do your own research before investing.
+  </div>
+  <div class="bottom-credit">Developed by Atharv Mandhne</div>
 </main>
+
+<button class="stock-fab" id="stockFab" aria-label="Search a stock">📈</button>
+<div class="stock-panel" id="stockPanel">
+  <div class="chat-head">
+    <span>Stock Search</span>
+    <button id="stockCloseBtn">✕</button>
+  </div>
+  <div class="stock-panel-search">
+    <input id="stockPanelInput" type="text" placeholder="Type a stock or company name…" autocomplete="off" />
+    <div class="search-suggestions" id="stockPanelSuggestions"></div>
+  </div>
+  <div class="stock-panel-body" id="stockPanelBody">
+    <div class="empty-state">Search for any NSE-listed stock to see its live price, news, and a quick company overview.</div>
+  </div>
+</div>
+
+<button class="chat-fab" id="chatFab" aria-label="Open chat">💬</button>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-head">
+    <span id="chatHeadTitle">SignalX Assistant</span>
+    <button id="chatCloseBtn">✕</button>
+  </div>
+  <div class="chat-messages" id="chatMessages"></div>
+  <div class="chat-input-row">
+    <input id="chatInput" type="text" placeholder="Ask about any stock or market topic…" autocomplete="off" />
+    <button id="chatSendBtn">➤</button>
+  </div>
+</div>
 
 <script>
 (function () {
   "use strict";
 
-  // Same-origin API calls — Flask serves this file AND the /api/* routes.
   const API_BASE = "";
-
   let currentLang = "english";
+  let activeTab = "today";
   let allArticles = [];
+  let searchQuery = "";
   let searchDebounce = null;
 
-  const newsListEl = document.getElementById("newsList");
-  const newsCountBadge = document.getElementById("newsCountBadge");
-  const newsTitleEl = document.getElementById("newsTitle");
-  const eventsScrollEl = document.getElementById("eventsScroll");
-  const searchInput = document.getElementById("searchInput");
-  const clearBtn = document.getElementById("clearBtn");
-  const langToggle = document.getElementById("langToggle");
+  const el = (id) => document.getElementById(id);
+  const contentArea = el("contentArea");
+  const contentTitle = el("contentTitle");
+  const contentBadge = el("contentBadge");
+  const searchInput = el("searchInput");
 
-  // ---------- Language toggle ----------
-  langToggle.addEventListener("click", (e) => {
-    const btn = e.target.closest("button[data-lang]");
-    if (!btn) return;
-    currentLang = btn.dataset.lang;
-    [...langToggle.querySelectorAll("button")].forEach((b) => b.classList.toggle("active", b === btn));
-  });
-
-  // ---------- Search ----------
-  searchInput.addEventListener("input", () => {
-    clearBtn.style.display = searchInput.value ? "block" : "none";
-    clearTimeout(searchDebounce);
-    searchDebounce = setTimeout(() => loadNews(searchInput.value.trim()), 350);
-  });
-  clearBtn.addEventListener("click", () => {
-    searchInput.value = "";
-    clearBtn.style.display = "none";
-    loadNews("");
-  });
+  // ---------- Clock ----------
+  function updateClock() {
+    const now = new Date();
+    el("clock").textContent = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit", hour12: true }) + " IST";
+  }
+  updateClock();
+  setInterval(updateClock, 1000);
 
   // ---------- Utilities ----------
+  function escapeHtml(str) {
+    return (str || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  }
   function timeAgo(iso) {
     try {
-      const diffMs = Date.now() - new Date(iso).getTime();
-      const mins = Math.floor(diffMs / 60000);
+      const mins = Math.floor((Date.now() - new Date(iso).getTime()) / 60000);
       if (mins < 1) return "just now";
       if (mins < 60) return mins + "m ago";
       const hrs = Math.floor(mins / 60);
       if (hrs < 24) return hrs + "h ago";
-      const days = Math.floor(hrs / 24);
-      return days + "d ago";
-    } catch (e) {
-      return "";
+      return Math.floor(hrs / 24) + "d ago";
+    } catch (e) { return ""; }
+  }
+  function fmtNum(n) {
+    if (n === null || n === undefined) return "—";
+    return n.toLocaleString("en-IN", { maximumFractionDigits: 2 });
+  }
+
+  // ---------- Language toggle (translates UI chrome + AI output language) ----------
+  const TRANSLATIONS = {
+    english: {
+      tabToday: "📰 Today", tabPast: "🕐 Past", tabUpcoming: "📅 Upcoming", tabPrediction: "📊 Prediction",
+      actTodayTitle: "Today's News", actTodaySub: "Live market update",
+      actPredTitle: "Prediction", actPredSub: "Sensex/Nifty outlook",
+      actUpTitle: "Upcoming Events", actUpSub: "RBI, IPO, Results",
+      actPastTitle: "Past 7 Days", actPastSub: "Last week recap",
+      quickSearchLabel: "More Quick Searches",
+      langHint: "| AI summaries below use this language",
+      searchPlaceholder: "Search any stock, company, topic…",
+      chatPlaceholder: "Ask about any stock or market topic…",
+      footer: 'SignalX aggregates public RSS headlines and uses Gemini AI to generate plain-language, illustrative summaries. Sector/stock impact estimates and predictions are <strong>not</strong> financial advice — always do your own research before investing.',
+      today: "Today's News", past: "Past 7 Days", upcoming: "Upcoming Events", prediction: "Market Prediction",
+    },
+    hinglish: {
+      tabToday: "📰 Aaj", tabPast: "🕐 Pichla", tabUpcoming: "📅 Aane Wala", tabPrediction: "📊 Prediction",
+      actTodayTitle: "Aaj ki News", actTodaySub: "Live market update",
+      actPredTitle: "Prediction", actPredSub: "Sensex/Nifty ka outlook",
+      actUpTitle: "Aane Wale Events", actUpSub: "RBI, IPO, Results",
+      actPastTitle: "Pichle 7 Din", actPastSub: "Last week ka recap",
+      quickSearchLabel: "Aur Quick Searches",
+      langHint: "| Neeche ke AI summaries is language mein aayenge",
+      searchPlaceholder: "Koi bhi stock, company, ya topic search karein…",
+      chatPlaceholder: "Kisi bhi stock ya market topic ke baare mein poochein…",
+      footer: 'SignalX public RSS headlines collect karta hai aur Gemini AI se plain-language, illustrative summaries banata hai. Sector/stock impact estimates aur predictions <strong>financial advice nahi hain</strong> — invest karne se pehle apni research zaroor karein.',
+      today: "Aaj ki News", past: "Pichle 7 Din", upcoming: "Aane Wale Events", prediction: "Market Prediction",
+    },
+  };
+
+  function applyTranslation(lang) {
+    const t = TRANSLATIONS[lang] || TRANSLATIONS.english;
+    el("tabLabelToday").textContent = t.tabToday;
+    el("tabLabelPast").textContent = t.tabPast;
+    el("tabLabelUpcoming").textContent = t.tabUpcoming;
+    el("tabLabelPrediction").textContent = t.tabPrediction;
+    el("quickSearchLabel").textContent = t.quickSearchLabel;
+    el("langHintText").textContent = t.langHint;
+    el("footerNote").innerHTML = t.footer;
+    searchInput.placeholder = t.searchPlaceholder;
+    el("chatInput").placeholder = t.chatPlaceholder;
+    TAB_TITLES.today = t.today;
+    TAB_TITLES.past = t.past;
+    TAB_TITLES.upcoming = t.upcoming;
+    TAB_TITLES.prediction = t.prediction;
+    if (!searchQuery) contentTitle.textContent = TAB_TITLES[activeTab];
+  }
+
+  function setLang(lang) {
+    currentLang = lang;
+    el("langEn").classList.toggle("on", lang === "english");
+    el("langHi").classList.toggle("on", lang === "hinglish");
+    applyTranslation(lang);
+  }
+  el("langEn").addEventListener("click", () => setLang("english"));
+  el("langHi").addEventListener("click", () => setLang("hinglish"));
+
+  // ---------- Tabs (top tabs + quick action grid share data-tab) ----------
+  const TAB_TITLES = {
+    today: "Today's News",
+    past: "Past 7 Days",
+    upcoming: "Upcoming Events",
+    prediction: "Market Prediction",
+  };
+
+  function setActiveTab(tab) {
+    activeTab = tab;
+    contentTitle.textContent = searchQuery ? `Results for "${searchQuery}"` : TAB_TITLES[tab];
+    document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === tab));
+    renderTab();
+  }
+
+  document.querySelectorAll("[data-tab]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      searchQuery = "";
+      searchInput.value = "";
+      setActiveTab(btn.dataset.tab);
+    });
+  });
+
+  function renderTab() {
+    if (activeTab === "today") return loadNews(searchQuery, null);
+    if (activeTab === "past") return loadNews(searchQuery, 7);
+    if (activeTab === "upcoming") return loadEvents();
+    if (activeTab === "prediction") return loadPrediction();
+    return Promise.resolve();
+  }
+
+  // ---------- Search ----------
+  function runSearch() {
+    searchQuery = searchInput.value.trim();
+    if (activeTab === "upcoming" || activeTab === "prediction") {
+      activeTab = "today";
+      document.querySelectorAll(".tab-btn").forEach((b) => b.classList.toggle("active", b.dataset.tab === "today"));
     }
+    contentTitle.textContent = searchQuery ? `Results for "${searchQuery}"` : TAB_TITLES[activeTab];
+    loadNews(searchQuery, activeTab === "past" ? 7 : null);
+  }
+  el("searchGoBtn").addEventListener("click", () => { hideSuggestions(); runSearch(); });
+  searchInput.addEventListener("keydown", (e) => { if (e.key === "Enter") { hideSuggestions(); runSearch(); } });
+  searchInput.addEventListener("input", () => {
+    clearTimeout(searchDebounce);
+    searchDebounce = setTimeout(runSearch, 400);
+    clearTimeout(suggestDebounce);
+    suggestDebounce = setTimeout(() => loadSuggestions(searchInput.value.trim()), 250);
+  });
+
+  // Sector chips + quick-search chips both just set the search box and search
+  document.querySelectorAll("[data-q]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      hideSuggestions();
+      searchInput.value = btn.dataset.q;
+      runSearch();
+    });
+  });
+
+  // ---------- Stock name/ticker autocomplete (covers the full ~2,000-stock NSE list) ----------
+  let suggestDebounce = null;
+  const suggestBox = el("searchSuggestions");
+
+  function hideSuggestions() {
+    suggestBox.classList.remove("open");
+    suggestBox.innerHTML = "";
   }
 
-  function escapeHtml(str) {
-    return (str || "").replace(/[&<>"']/g, (c) => ({
-      "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;"
-    }[c]));
-  }
-
-  // ---------- Events ----------
-  async function loadEvents() {
+  async function loadSuggestions(query) {
+    if (query.length < 2) { hideSuggestions(); return; }
     try {
-      const res = await fetch(`${API_BASE}/api/events`);
-      const data = await res.json();
-      const events = data.events || [];
-      if (!events.length) {
-        eventsScrollEl.innerHTML = '<div class="loading-state">No events configured yet.</div>';
-        return;
-      }
-      eventsScrollEl.innerHTML = events.map((ev) => `
-        <div class="event-card">
-          <span class="cat">${escapeHtml(ev.category)}</span>
-          <h4>${escapeHtml(ev.name)}</h4>
-          <p>${escapeHtml(ev.note || "")}</p>
-        </div>
-      `).join("");
-    } catch (e) {
-      eventsScrollEl.innerHTML = '<div class="loading-state">Could not load events.</div>';
-    }
-  }
-
-  // ---------- News ----------
-  async function loadNews(query) {
-    newsTitleEl.textContent = query ? `Results for "${query}"` : "Latest News";
-    try {
-      const url = new URL(`${API_BASE}/api/news`, window.location.origin);
-      if (query) url.searchParams.set("q", query);
+      const url = new URL(`${API_BASE}/api/stocks/search`, window.location.origin);
+      url.searchParams.set("q", query);
       const res = await fetch(url);
       const data = await res.json();
-      allArticles = data.articles || [];
-      newsCountBadge.textContent = allArticles.length;
-      renderNews(allArticles);
+      const results = data.results || [];
+      if (!results.length) { hideSuggestions(); return; }
+      suggestBox.innerHTML = results.map((r) => `
+        <div class="suggestion-item" data-symbol="${escapeHtml(r.symbol)}" data-name="${escapeHtml(r.name)}">
+          <span class="sname">${escapeHtml(r.name)}</span>
+          <span class="ssym">${escapeHtml(r.symbol)}</span>
+        </div>
+      `).join("");
+      suggestBox.classList.add("open");
+      suggestBox.querySelectorAll(".suggestion-item").forEach((item) => {
+        item.addEventListener("click", () => {
+          searchInput.value = item.dataset.name;
+          hideSuggestions();
+          runSearch();
+        });
+      });
     } catch (e) {
-      newsListEl.innerHTML = '<div class="empty-state">⚠️ Could not reach the news server. Please check your connection or try again shortly.</div>';
+      hideSuggestions();
     }
   }
 
-  function renderNews(articles) {
-    if (!articles.length) {
-      newsListEl.innerHTML = '<div class="empty-state">No news found. Try a different search term.</div>';
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".search-wrap")) hideSuggestions();
+  });
+
+  // ---------- Ticker ----------
+  async function loadTicker() {
+    try {
+      const res = await fetch(`${API_BASE}/api/ticker`);
+      const data = await res.json();
+      const items = [
+        ["Sensex", data.sensex, (v) => fmtNum(v)],
+        ["Nifty", data.nifty, (v) => fmtNum(v)],
+        ["Gold", data.gold, (v) => "₹" + fmtNum(v) + "/10g"],
+        ["USD/INR", data.usdinr, (v) => "₹" + fmtNum(v)],
+        ["Crude", data.crude, (v) => "$" + fmtNum(v)],
+        ["Silver", data.silver, (v) => "₹" + fmtNum(v) + "/kg"],
+      ].filter(([, obj]) => obj && obj.value != null); // hide any tile we couldn't get real data for, instead of showing "—"
+      if (!items.length) {
+        el("tickerScroll").innerHTML = '<div class="loading-state" style="padding:0; font-size:12px;">Market data unavailable right now.</div>';
+        return;
+      }
+      el("tickerScroll").innerHTML = items.map(([name, obj, fmt], i) => {
+        const dirClass = obj.direction === "UP" ? "up" : obj.direction === "DOWN" ? "down" : "";
+        const arrow = obj.direction === "UP" ? " ↑" : obj.direction === "DOWN" ? " ↓" : "";
+        const sep = i < items.length - 1 ? '<div class="tick-sep"></div>' : "";
+        return `<div class="tick"><span class="tick-name">${name}</span><span class="tick-val ${dirClass}">${fmt(obj.value)}${arrow}</span></div>${sep}`;
+      }).join("");
+    } catch (e) {
+      el("tickerScroll").innerHTML = '<div class="loading-state" style="padding:0;font-size:12px;">Market data unavailable right now.</div>';
+    }
+  }
+
+  // ---------- News (Today / Past / search) — also resolves a stock match ----------
+  async function loadNews(query, days) {
+    contentArea.innerHTML = '<div class="loading-state">Fetching headlines…</div>';
+
+    // News fetch — this alone determines whether the list renders.
+    let articles = [];
+    let newsFailed = false;
+    try {
+      const newsUrl = new URL(`${API_BASE}/api/news`, window.location.origin);
+      if (query) newsUrl.searchParams.set("q", query);
+      if (days) newsUrl.searchParams.set("days", days);
+      const res = await fetch(newsUrl);
+      const data = await res.json();
+      articles = data.articles || [];
+    } catch (e) {
+      newsFailed = true;
+    }
+    allArticles = articles;
+    contentBadge.textContent = articles.length;
+
+    // Stock lookup — fully independent; a timeout or failure here never hides news.
+    let stockData = null;
+    if (query) {
+      try {
+        const stockUrl = new URL(`${API_BASE}/api/stock`, window.location.origin);
+        stockUrl.searchParams.set("q", query);
+        const controller = new AbortController();
+        const timer = setTimeout(() => controller.abort(), 8000);
+        const stockRes = await fetch(stockUrl, { signal: controller.signal });
+        clearTimeout(timer);
+        stockData = await stockRes.json();
+      } catch (e) {
+        stockData = null; // stock lookup timed out or failed — news still shows below
+      }
+    }
+
+    if (newsFailed) {
+      contentArea.innerHTML = '<div class="empty-state">⚠️ Could not reach the news server. Try again shortly.</div>';
       return;
     }
-    newsListEl.innerHTML = articles.map((a, idx) => `
-      <div class="news-card" data-idx="${idx}">
+    renderNews(articles, stockData);
+  }
+
+  function renderStockCard(data) {
+    const q = data.quote;
+    if (!q || q.price == null) {
+      return `
+        <div class="stock-card">
+          <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · ${escapeHtml(data.exchange || "NSE")}</span></div></div>
+          <div class="stock-unavailable">Live price temporarily unavailable — showing related news below.</div>
+        </div>`;
+    }
+    const pct = q.pct_change || 0;
+    const changeClass = pct >= 0 ? "up" : "down";
+    const sign = pct >= 0 ? "+" : "";
+    const arrow = pct >= 0 ? "▲" : "▼";
+    return `
+      <div class="stock-card">
+        <div class="stock-card-head"><div><h3>${escapeHtml(data.company_name)}</h3><span class="sym">${escapeHtml(data.symbol)} · ${escapeHtml(data.exchange || "NSE")}</span></div></div>
+        <div class="stock-price">₹${fmtNum(q.price)}</div>
+        <div class="stock-change ${changeClass}">${sign}${fmtNum(q.change)} (${sign}${fmtNum(q.pct_change)}%) ${arrow}</div>
+        <div class="stock-meta-row">
+          <div>Day High<b>₹${fmtNum(q.day_high)}</b></div>
+          <div>Day Low<b>₹${fmtNum(q.day_low)}</b></div>
+          <div>Prev Close<b>₹${fmtNum(q.prev_close)}</b></div>
+        </div>
+      </div>`;
+  }
+
+  function renderNews(articles, stockData) {
+    const stockHtml = (stockData && stockData.matched) ? renderStockCard(stockData) : "";
+
+    if (!articles.length) {
+      contentArea.innerHTML = stockHtml || '<div class="empty-state">No news found. Try a different search term.</div>';
+      return;
+    }
+    contentArea.innerHTML = stockHtml + articles.map((a, idx) => `
+      <div class="news-card">
         <div class="news-meta">
           <span class="source-tag">${escapeHtml(a.source)}</span>
           <span>${timeAgo(a.published)}</span>
@@ -359,14 +788,14 @@
       </div>
     `).join("");
 
-    newsListEl.querySelectorAll(".analyze-btn").forEach((btn) => {
+    contentArea.querySelectorAll(".analyze-btn").forEach((btn) => {
       btn.addEventListener("click", () => analyzeArticle(parseInt(btn.dataset.idx, 10), btn));
     });
   }
 
   async function analyzeArticle(idx, btnEl) {
     const article = allArticles[idx];
-    const block = document.getElementById(`ai-block-${idx}`);
+    const block = el(`ai-block-${idx}`);
     if (!article || !block) return;
 
     block.classList.add("show");
@@ -377,24 +806,17 @@
       const res = await fetch(`${API_BASE}/api/analyze`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          title: article.title,
-          summary: article.summary,
-          link: article.link,
-          language: currentLang,
-        }),
+        body: JSON.stringify({ title: article.title, summary: article.summary, link: article.link, language: currentLang }),
       });
       const data = await res.json();
-
       if (!res.ok || data.error) {
         block.innerHTML = `<div class="ai-error">⚠️ ${escapeHtml(data.error || "Analysis failed.")}</div>`;
         btnEl.disabled = false;
         return;
       }
-
       block.innerHTML = renderAnalysis(data);
     } catch (e) {
-      block.innerHTML = `<div class="ai-error">⚠️ Could not reach the AI service. Please try again.</div>`;
+      block.innerHTML = `<div class="ai-error">⚠️ Could not reach the AI service. Try again.</div>`;
       btnEl.disabled = false;
     }
   }
@@ -402,11 +824,9 @@
   function renderAnalysis(data) {
     const sentiment = ["Bullish", "Bearish", "Neutral"].includes(data.sentiment) ? data.sentiment : "Neutral";
     const sentimentIcon = sentiment === "Bullish" ? "▲" : sentiment === "Bearish" ? "▼" : "◆";
-
     const sectorsHtml = (data.sectors || []).map((s) => `
-      <span class="chip chip-${s.impact || "NEUTRAL"}">${escapeHtml(s.name)} ${s.impact === "UP" ? "↑" : s.impact === "DOWN" ? "↓" : "→"}</span>
+      <span class="impact-chip impact-${s.impact || "NEUTRAL"}">${escapeHtml(s.name)} ${s.impact === "UP" ? "↑" : s.impact === "DOWN" ? "↓" : "→"}</span>
     `).join("");
-
     const stocksHtml = (data.stocks || []).length ? `
       <table class="stock-table">
         <thead><tr><th>Stock</th><th>Impact</th><th>Est. Change</th></tr></thead>
@@ -414,13 +834,12 @@
           ${(data.stocks || []).map((s) => `
             <tr>
               <td class="ticker">${escapeHtml(s.ticker || s.name || "")}</td>
-              <td><span class="chip chip-${s.impact || "NEUTRAL"}">${s.impact === "UP" ? "↑ UP" : s.impact === "DOWN" ? "↓ DOWN" : "→ FLAT"}</span></td>
+              <td><span class="impact-chip impact-${s.impact || "NEUTRAL"}">${s.impact === "UP" ? "↑ UP" : s.impact === "DOWN" ? "↓ DOWN" : "→ FLAT"}</span></td>
               <td class="change-${s.impact || "NEUTRAL"}">${escapeHtml(s.estimated_change || "—")}</td>
             </tr>
           `).join("")}
         </tbody>
-      </table>
-    ` : "";
+      </table>` : "";
 
     return `
       <span class="sentiment-pill sentiment-${sentiment}">${sentimentIcon} ${sentiment}</span>
@@ -431,9 +850,303 @@
     `;
   }
 
+  // ---------- Upcoming events ----------
+  async function loadEvents() {
+    contentArea.innerHTML = '<div class="loading-state">Loading events…</div>';
+    try {
+      const res = await fetch(`${API_BASE}/api/events`);
+      const data = await res.json();
+      const events = data.events || [];
+      contentBadge.textContent = events.length;
+      if (!events.length) {
+        contentArea.innerHTML = '<div class="empty-state">No events configured yet.</div>';
+        return;
+      }
+      contentArea.innerHTML = events.map((ev) => `
+        <div class="event-card">
+          <span class="cat">${escapeHtml(ev.category)}</span>
+          <h4>${escapeHtml(ev.name)}</h4>
+          <p>${escapeHtml(ev.note || "")}</p>
+        </div>
+      `).join("");
+    } catch (e) {
+      contentArea.innerHTML = '<div class="empty-state">⚠️ Could not load events.</div>';
+    }
+  }
+
+  // ---------- Prediction ----------
+  async function loadPrediction() {
+    contentBadge.textContent = "AI";
+    contentArea.innerHTML = '<div class="loading-state"><span class="spinner"></span><br/><br/>Generating outlook with Gemini AI…</div>';
+    try {
+      const url = new URL(`${API_BASE}/api/prediction`, window.location.origin);
+      url.searchParams.set("language", currentLang);
+      const res = await fetch(url);
+      const data = await res.json();
+      if (!res.ok || data.error) {
+        contentArea.innerHTML = `<div class="empty-state">⚠️ ${escapeHtml(data.error || "Prediction unavailable right now.")}</div>`;
+        return;
+      }
+      renderPrediction(data);
+    } catch (e) {
+      contentArea.innerHTML = '<div class="empty-state">⚠️ Could not reach the AI service.</div>';
+    }
+  }
+
+  function renderPrediction(data) {
+    const sentiment = ["Bullish", "Bearish", "Neutral"].includes(data.sentiment) ? data.sentiment : "Neutral";
+    const sentimentIcon = sentiment === "Bullish" ? "▲" : sentiment === "Bearish" ? "▼" : "◆";
+    const upChips = (data.sectors_up || []).map((s) => `<span class="impact-chip impact-UP">${escapeHtml(s.name)} ↑</span>`).join("");
+    const downChips = (data.sectors_down || []).map((s) => `<span class="impact-chip impact-DOWN">${escapeHtml(s.name)} ↓</span>`).join("");
+    const risks = (data.key_risks || []).map((r) => `<li>${escapeHtml(r)}</li>`).join("");
+
+    contentArea.innerHTML = `
+      <div class="refresh-row"><button class="refresh-btn" id="refreshPredictionBtn">↻ Refresh</button></div>
+      <div class="prediction-card">
+        <span class="sentiment-pill sentiment-${sentiment}">${sentimentIcon} ${sentiment}</span>
+        <div class="ai-summary">${escapeHtml(data.overall_outlook || "")}</div>
+        ${upChips ? `<div class="prediction-section"><h4>Sectors likely UP</h4><div class="chip-row">${upChips}</div></div>` : ""}
+        ${downChips ? `<div class="prediction-section"><h4>Sectors likely DOWN</h4><div class="chip-row">${downChips}</div></div>` : ""}
+        ${risks ? `<div class="prediction-section"><h4>Key risks to watch</h4><ul class="risk-list">${risks}</ul></div>` : ""}
+        <div class="ai-disclaimer">${escapeHtml(data.disclaimer || "Illustrative outlook only — not investment advice.")}</div>
+      </div>
+    `;
+    el("refreshPredictionBtn").addEventListener("click", loadPrediction);
+  }
+
+  // ---------- Chatbot ----------
+  let chatHistory = [];
+  const chatFab = el("chatFab");
+  const chatPanel = el("chatPanel");
+  const chatMessages = el("chatMessages");
+  const chatInput = el("chatInput");
+
+  function toggleChat(open) {
+    chatPanel.classList.toggle("open", open);
+    if (open && !chatMessages.dataset.greeted) {
+      chatMessages.dataset.greeted = "1";
+      appendChatMsg("bot", "Hi! I'm your Market Pulse assistant. Ask me about any stock, sector, or market topic.");
+    }
+  }
+  chatFab.addEventListener("click", () => toggleChat(!chatPanel.classList.contains("open")));
+  el("chatCloseBtn").addEventListener("click", () => toggleChat(false));
+
+  // Minimal, safe markdown-lite: escapes HTML first, then supports **bold**,
+  // "- " bullet lines, and line breaks — enough to make AI replies scannable
+  // without pulling in a full markdown library.
+  function formatChatText(raw) {
+    const escaped = escapeHtml(raw || "");
+    const lines = escaped.split("\n");
+    let html = "";
+    let inList = false;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith("- ") || trimmed.startsWith("• ")) {
+        if (!inList) { html += "<ul>"; inList = true; }
+        html += `<li>${trimmed.slice(2)}</li>`;
+      } else {
+        if (inList) { html += "</ul>"; inList = false; }
+        if (trimmed) html += `<p>${trimmed}</p>`;
+      }
+    }
+    if (inList) html += "</ul>";
+    return html.replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+  }
+
+  function appendChatMsg(role, text, loading) {
+    const div = document.createElement("div");
+    div.className = `chat-msg ${role}${loading ? " loading" : ""}`;
+    if (role === "bot" && !loading) {
+      div.innerHTML = formatChatText(text);
+    } else {
+      div.textContent = text;
+    }
+    chatMessages.appendChild(div);
+    chatMessages.scrollTop = chatMessages.scrollHeight;
+    return div;
+  }
+
+  async function sendChatMessage() {
+    const msg = chatInput.value.trim();
+    if (!msg) return;
+    chatInput.value = "";
+    appendChatMsg("user", msg);
+    chatHistory.push({ role: "user", content: msg });
+    const loadingEl = appendChatMsg("bot", "Thinking…", true);
+
+    try {
+      const res = await fetch(`${API_BASE}/api/chat`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: msg, history: chatHistory.slice(-10), language: currentLang }),
+      });
+      const data = await res.json();
+      loadingEl.remove();
+      if (!res.ok || data.error) {
+        appendChatMsg("bot", `⚠️ ${data.error || "Something went wrong."}`);
+        return;
+      }
+      appendChatMsg("bot", data.reply);
+      chatHistory.push({ role: "model", content: data.reply });
+    } catch (e) {
+      loadingEl.remove();
+      appendChatMsg("bot", "⚠️ Could not reach the assistant. Please try again.");
+    }
+  }
+  el("chatSendBtn").addEventListener("click", sendChatMessage);
+  chatInput.addEventListener("keydown", (e) => { if (e.key === "Enter") sendChatMessage(); });
+
+  // ---------- Stock-search widget ----------
+  const stockFab = el("stockFab");
+  const stockPanel = el("stockPanel");
+  const stockPanelInput = el("stockPanelInput");
+  const stockPanelBody = el("stockPanelBody");
+  const stockPanelSuggestBox = el("stockPanelSuggestions");
+  let stockPanelDebounce = null;
+  let stockNewsCache = [];
+
+  function toggleStockPanel(open) {
+    stockPanel.classList.toggle("open", open);
+    if (open) chatPanel.classList.remove("open"); // don't show both floating panels at once
+  }
+  stockFab.addEventListener("click", () => toggleStockPanel(!stockPanel.classList.contains("open")));
+  el("stockCloseBtn").addEventListener("click", () => toggleStockPanel(false));
+  chatFab.addEventListener("click", () => toggleStockPanel(false));
+
+  function hideStockSuggestions() {
+    stockPanelSuggestBox.classList.remove("open");
+    stockPanelSuggestBox.innerHTML = "";
+  }
+
+  stockPanelInput.addEventListener("input", () => {
+    clearTimeout(stockPanelDebounce);
+    const q = stockPanelInput.value.trim();
+    stockPanelDebounce = setTimeout(async () => {
+      if (q.length < 2) { hideStockSuggestions(); return; }
+      try {
+        const url = new URL(`${API_BASE}/api/stocks/search`, window.location.origin);
+        url.searchParams.set("q", q);
+        const res = await fetch(url);
+        const data = await res.json();
+        const results = data.results || [];
+        if (!results.length) { hideStockSuggestions(); return; }
+        stockPanelSuggestBox.innerHTML = results.map((r) => `
+          <div class="suggestion-item" data-symbol="${escapeHtml(r.symbol)}" data-name="${escapeHtml(r.name)}">
+            <span class="sname">${escapeHtml(r.name)}</span><span class="ssym">${escapeHtml(r.symbol)}</span>
+          </div>
+        `).join("");
+        stockPanelSuggestBox.classList.add("open");
+        stockPanelSuggestBox.querySelectorAll(".suggestion-item").forEach((item) => {
+          item.addEventListener("click", () => {
+            stockPanelInput.value = item.dataset.name;
+            hideStockSuggestions();
+            loadStockDetail(item.dataset.symbol, item.dataset.name);
+          });
+        });
+      } catch (e) { hideStockSuggestions(); }
+    }, 250);
+  });
+
+  document.addEventListener("click", (e) => {
+    if (!e.target.closest(".stock-panel-search")) hideStockSuggestions();
+  });
+
+  async function loadStockDetail(symbol, name) {
+    stockPanelBody.innerHTML = '<div class="loading-state"><span class="spinner"></span><br/><br/>Loading stock details…</div>';
+    try {
+      const stockUrl = new URL(`${API_BASE}/api/stock`, window.location.origin);
+      stockUrl.searchParams.set("q", name);
+      const overviewUrl = new URL(`${API_BASE}/api/stock/overview`, window.location.origin);
+      overviewUrl.searchParams.set("symbol", symbol);
+      overviewUrl.searchParams.set("name", name);
+      overviewUrl.searchParams.set("language", currentLang);
+
+      const [stockRes, overviewRes] = await Promise.allSettled([fetch(stockUrl), fetch(overviewUrl)]);
+
+      let stockData = { matched: false, quote: null, news: [] };
+      if (stockRes.status === "fulfilled") {
+        try { stockData = await stockRes.value.json(); } catch (e) {}
+      }
+      let overviewText = "";
+      if (overviewRes.status === "fulfilled") {
+        try {
+          const od = await overviewRes.value.json();
+          overviewText = od.overview || "";
+        } catch (e) {}
+      }
+
+      stockNewsCache = stockData.news || [];
+      renderStockDetail(stockData.company_name || name, stockData.symbol || symbol, stockData.exchange || "NSE", stockData.quote, overviewText);
+    } catch (e) {
+      stockPanelBody.innerHTML = '<div class="empty-state">⚠️ Could not load this stock right now. Try again.</div>';
+    }
+  }
+
+  function renderStockDetail(name, symbol, exchange, quote, overviewText) {
+    const priceHtml = renderStockCard({ matched: true, company_name: name, symbol, exchange, quote });
+    const overviewHtml = overviewText
+      ? `<div class="stock-overview">${escapeHtml(overviewText)}</div>`
+      : `<div class="stock-overview">Company overview is unavailable right now.</div>`;
+
+    stockPanelBody.innerHTML = `
+      ${priceHtml}
+      ${overviewHtml}
+      <div class="stock-news-tabs">
+        <button class="stock-news-tab active" data-range="present">Present News</button>
+        <button class="stock-news-tab" data-range="past">Past News</button>
+      </div>
+      <div id="stockNewsList"></div>
+    `;
+    stockPanelBody.querySelectorAll(".stock-news-tab").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        stockPanelBody.querySelectorAll(".stock-news-tab").forEach((b) => b.classList.toggle("active", b === btn));
+        renderStockNewsList(btn.dataset.range);
+      });
+    });
+    renderStockNewsList("present");
+  }
+
+  function renderStockNewsList(range) {
+    const cutoff = Date.now() - 3 * 24 * 60 * 60 * 1000; // present = last 3 days
+    const filtered = stockNewsCache.filter((a) => {
+      const t = new Date(a.published).getTime();
+      return range === "present" ? t >= cutoff : t < cutoff;
+    });
+    const list = el("stockNewsList");
+    if (!filtered.length) {
+      list.innerHTML = `<div class="empty-state" style="padding:20px 4px;">No ${range} news found for this stock.</div>`;
+      return;
+    }
+    list.innerHTML = filtered.map((a) => `
+      <div class="stock-news-item">
+        <div class="snsrc">${escapeHtml(a.source)} · ${timeAgo(a.published)}</div>
+        <a href="${a.link}" target="_blank" rel="noopener noreferrer">${escapeHtml(a.title)}</a>
+      </div>
+    `).join("");
+  }
+
+  // ---------- Manual refresh (header button) ----------
+  // No more auto-refresh timers — the user taps this whenever they want the
+  // latest ticker prices + current tab's content re-fetched.
+  const headerRefreshBtn = el("headerRefreshBtn");
+  async function manualRefresh() {
+    if (headerRefreshBtn.classList.contains("spinning")) return; // avoid stacking clicks
+    headerRefreshBtn.classList.add("spinning");
+    try {
+      await Promise.all([loadTicker(), renderTab()]);
+    } finally {
+      setTimeout(() => headerRefreshBtn.classList.remove("spinning"), 400);
+    }
+  }
+  headerRefreshBtn.addEventListener("click", manualRefresh);
+
   // ---------- Init ----------
-  loadEvents();
-  loadNews("");
+  loadTicker();
+  setActiveTab("today");
+
+  window.addEventListener("load", () => {
+    setTimeout(() => el("splashScreen").classList.add("hide"), 900);
+  });
 })();
 </script>
 
