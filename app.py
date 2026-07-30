@@ -515,7 +515,7 @@ SEARCH_CACHE_TTL = 300
 _search_cache: dict[str, tuple[float, list[dict]]] = {}
 
 
-def _search_yahoo_stocks(q: str, limit: int = 8) -> list[dict]:
+def _search_yahoo_stocks(q: str, limit: int = 8, timeout: float = SEARCH_TIMEOUT) -> list[dict]:
     """Search Yahoo Finance for NSE/BSE-listed equities matching a name/ticker.
     Yahoo indexes virtually the entire NSE+BSE universe, and — unlike NSE's or
     BSE's own sites — is reliably reachable from a cloud server. This is the
@@ -735,6 +735,13 @@ def _search_equity_master(q: str, limit: int = 8, allow_network: bool = True) ->
     combined = (exact + starts + contains)[:limit]
 
     if not allow_network or len(combined) >= limit:
+        if not allow_network and not combined and not _equity_master:
+            # Safety net: NSE's own list totally failed to load this cycle
+            # (NSE blocks many cloud/datacenter IPs outright — see comments
+            # above). Rather than the search bar going completely empty,
+            # take one fast, Yahoo-only pass (skip BSE's slower scrape here
+            # to keep this snappy) so typing still produces results.
+            return _search_yahoo_stocks(q, limit)[:limit]
         return combined[:limit]
 
     cache_key = f"{q_upper}:{limit}"
