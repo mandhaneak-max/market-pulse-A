@@ -707,41 +707,69 @@ def fetch_equity_master(force: bool = False) -> None:
 
 
 def _search_equity_master(q: str, limit: int = 8, allow_network: bool = True) -> list[dict]:
-    """Search NSE's ~2,000-stock list first (in-memory, effectively instant).
+    """Search for a stock, cheapest/most-reliable source first:
 
-    allow_network=True (used for an actual stock lookup, not every keystroke)
-    additionally runs a BSE search + a Yahoo search IN PARALLEL — rather than
-    one after another — to top up results for BSE-only smaller-cap stocks,
-    and caches that network-augmented result for a few minutes so picking a
-    just-typed suggestion doesn't repeat the same slow lookup.
-
-    allow_network=False (used by the live autocomplete dropdown) never makes
-    a network call at all, so it stays instant while the user is typing."""
+    Tier 0: the curated STOCK_SYMBOLS shortlist (~90 major stocks) — zero
+    network calls, always correct, so these never break no matter what NSE/
+    BSE/Yahoo are doing.
+    Tier 1: NSE's ~2,000-stock list (in-memory once loaded — instant).
+    Tier 2 (allow_network=True only): BSE search + Yahoo search, run in
+    parallel, for anything tiers 0-1 didn't cover.
+    Tier 2-fast (allow_network=False only): a single quick Yahoo-only pass
+    (short timeout) if we're still short — covers the live autocomplete
+    dropdown without waiting on BSE's slower scrape, and without depending
+    on NSE's list having loaded (it's blocked from many cloud IPs)."""
     fetch_equity_master()
     q_upper = q.strip().upper()
+    q_lower = q.strip().lower()
     if not q_upper:
         return []
 
-    exact, starts, contains = [], [], []
+    combined: list[dict] = []
+    seen_symbols = set()
+
+    def _add(entry):
+        key = entry["symbol"].upper()
+        if key not in seen_symbols:
+            combined.append(entry)
+            seen_symbols.add(key)
+
+    # Tier 0 — curated shortlist, exact alias match first, then partial.
+    exact0, partial0 = [], []
+    for alias, (symbol, name) in STOCK_SYMBOLS.items():
+        entry = {"symbol": symbol, "name": name, "exchange": "NSE"}
+        if alias == q_lower:
+            exact0.append(entry)
+        elif alias.startswith(q_lower) or q_lower in alias:
+            partial0.append(entry)
+    for entry in exact0 + partial0:
+        _add(entry)
+
+    # Tier 1 — NSE's full list, if it loaded.
+    exact1, starts1, contains1 = [], [], []
     for symbol, name in _equity_master.items():
         name_upper = name.upper()
         entry = {"symbol": symbol, "name": name, "exchange": "NSE"}
         if symbol == q_upper:
-            exact.append(entry)
+            exact1.append(entry)
         elif symbol.startswith(q_upper) or name_upper.startswith(q_upper):
-            starts.append(entry)
+            starts1.append(entry)
         elif q_upper in symbol or q_upper in name_upper:
-            contains.append(entry)
-    combined = (exact + starts + contains)[:limit]
+            contains1.append(entry)
+    for entry in exact1 + starts1 + contains1:
+        if len(combined) >= limit:
+            break
+        _add(entry)
 
-    if not allow_network or len(combined) >= limit:
-        if not allow_network and not combined and not _equity_master:
-            # Safety net: NSE's own list totally failed to load this cycle
-            # (NSE blocks many cloud/datacenter IPs outright — see comments
-            # above). Rather than the search bar going completely empty,
-            # take one fast, Yahoo-only pass (skip BSE's slower scrape here
-            # to keep this snappy) so typing still produces results.
-            return _search_yahoo_stocks(q, limit)[:limit]
+    if len(combined) >= limit:
+        return combined[:limit]
+
+    if not allow_network:
+        # Tier 2-fast: one quick Yahoo pass so the live dropdown still finds
+        # stocks outside the curated shortlist + NSE list, without the
+        # slower BSE scrape and without ever blocking on NSE being reachable.
+        for entry in _search_yahoo_stocks(q, limit - len(combined)):
+            _add(entry)
         return combined[:limit]
 
     cache_key = f"{q_upper}:{limit}"
