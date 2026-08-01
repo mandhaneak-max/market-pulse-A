@@ -115,19 +115,6 @@
   }
   .tab-btn.active{ background:#fff; color: var(--navy-1); border-color:#fff; }
 
-  /* ---------- Quick sector/index chips ---------- */
-  .chips-strip{
-    background: var(--blue-chip); padding:8px 12px; display:flex; gap:6px; overflow-x:auto;
-    scrollbar-width:none; flex-wrap:nowrap;
-  }
-  .chips-strip::-webkit-scrollbar{ display:none; }
-  .chip{
-    color:#fff; font-size:11px; font-weight:500; padding:5px 11px; border-radius:20px;
-    border:1px solid rgba(255,255,255,0.25); background: rgba(255,255,255,0.1);
-    cursor:pointer; white-space:nowrap; flex-shrink:0; transition: all .15s;
-  }
-  .chip:hover, .chip:active{ background: var(--orange); border-color: var(--orange); }
-
   /* ---------- Language + hint bar ---------- */
   .lang-bar{
     background: var(--card); border-bottom:1px solid var(--border);
@@ -168,13 +155,12 @@
     font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px;
     color: var(--text-dim); margin-bottom:9px;
   }
-  .quick-search-wrap{ margin-bottom:20px; }
-  .chip2-row{ display:flex; flex-wrap:wrap; gap:6px; }
-  .chip2{
-    font-size:12px; padding:5px 12px; border-radius:20px; border:1px solid var(--border);
-    background: var(--card); color: var(--text); cursor:pointer; transition: all .15s;
+  .news-cat-row{ display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-bottom:18px; }
+  .news-cat-btn{
+    font-size:13px; font-weight:650; padding:12px 10px; border-radius:12px; border:1px solid var(--border);
+    background: var(--card); color: var(--text); cursor:pointer; transition: all .15s; text-align:center;
   }
-  .chip2:hover, .chip2:active{ background: var(--navy-1); color:#fff; border-color: var(--navy-1); }
+  .news-cat-btn:hover, .news-cat-btn:active{ background: var(--navy-1); color:#fff; border-color: var(--navy-1); }
 
   .content-header{ display:flex; align-items:center; justify-content:space-between; margin-bottom:10px; }
   .content-header h2{ font-size:15px; margin:0; }
@@ -384,19 +370,6 @@
   </div>
 </div>
 
-<div class="chips-strip" id="sectorChips">
-  <button class="chip" data-q="sensex">📈 Sensex</button>
-  <button class="chip" data-q="nifty">📊 Nifty</button>
-  <button class="chip" data-q="reliance">🏭 Reliance</button>
-  <button class="chip" data-q="rbi">🏦 RBI</button>
-  <button class="chip" data-q="it sector">💻 IT</button>
-  <button class="chip" data-q="banking">🏦 Banks</button>
-  <button class="chip" data-q="gold">🪙 Gold</button>
-  <button class="chip" data-q="ipo">🆕 IPO</button>
-  <button class="chip" data-q="usd inr rupee">💱 USD/INR</button>
-  <button class="chip" data-q="crude oil">⛽ Oil</button>
-</div>
-
 <div class="lang-bar">
   <button class="lang-btn on" id="langEn" data-lang="english">🇬🇧 EN</button>
   <button class="lang-btn" id="langHi" data-lang="hinglish">🇮🇳 HI</button>
@@ -410,16 +383,9 @@
 </div>
 
 <main>
-  <div class="quick-search-wrap">
-    <div class="section-title" id="quickSearchLabel">More Quick Searches</div>
-    <div class="chip2-row" id="stockChips">
-      <button class="chip2" data-q="reliance industries">🏭 Reliance</button>
-      <button class="chip2" data-q="hdfc bank">🏦 HDFC Bank</button>
-      <button class="chip2" data-q="tcs">💻 TCS</button>
-      <button class="chip2" data-q="infosys">💻 Infosys</button>
-      <button class="chip2" data-q="sbi">🏦 SBI</button>
-      <button class="chip2" data-q="mutual funds sip">💼 Mutual Funds</button>
-    </div>
+  <div class="news-cat-row">
+    <button class="news-cat-btn" data-q="stock market shares nse bse"><span id="newsCatStockLabel">📈 Stock News</span></button>
+    <button class="news-cat-btn" data-q="gold silver crude oil commodity"><span id="newsCatCommodityLabel">🛢️ Commodity News</span></button>
   </div>
 
   <div class="content-header">
@@ -519,7 +485,7 @@
       actPredTitle: "Prediction", actPredSub: "Sensex/Nifty outlook",
       actUpTitle: "Upcoming Events", actUpSub: "RBI, IPO, Results",
       actPastTitle: "Past 7 Days", actPastSub: "Last week recap",
-      quickSearchLabel: "More Quick Searches",
+      newsCatStock: "📈 Stock News", newsCatCommodity: "🛢️ Commodity News",
       langHint: "| AI summaries below use this language",
       searchPlaceholder: "Search any stock, company, topic…",
       chatPlaceholder: "Ask about any stock or market topic…",
@@ -532,7 +498,7 @@
       actPredTitle: "Prediction", actPredSub: "Sensex/Nifty ka outlook",
       actUpTitle: "Aane Wale Events", actUpSub: "RBI, IPO, Results",
       actPastTitle: "Pichle 7 Din", actPastSub: "Last week ka recap",
-      quickSearchLabel: "Aur Quick Searches",
+      newsCatStock: "📈 Stock News", newsCatCommodity: "🛢️ Commodity News",
       langHint: "| Neeche ke AI summaries is language mein aayenge",
       searchPlaceholder: "Koi bhi stock, company, ya topic search karein…",
       chatPlaceholder: "Kisi bhi stock ya market topic ke baare mein poochein…",
@@ -547,7 +513,8 @@
     el("tabLabelPast").textContent = t.tabPast;
     el("tabLabelUpcoming").textContent = t.tabUpcoming;
     el("tabLabelPrediction").textContent = t.tabPrediction;
-    el("quickSearchLabel").textContent = t.quickSearchLabel;
+    el("newsCatStockLabel").textContent = t.newsCatStock;
+    el("newsCatCommodityLabel").textContent = t.newsCatCommodity;
     el("langHintText").textContent = t.langHint;
     el("footerNote").innerHTML = t.footer;
     searchInput.placeholder = t.searchPlaceholder;
@@ -676,10 +643,8 @@
       const items = [
         ["Sensex", data.sensex, (v) => fmtNum(v)],
         ["Nifty", data.nifty, (v) => fmtNum(v)],
-        ["Gold", data.gold, (v) => "₹" + fmtNum(v) + "/10g"],
         ["USD/INR", data.usdinr, (v) => "₹" + fmtNum(v)],
         ["Crude", data.crude, (v) => "$" + fmtNum(v)],
-        ["Silver", data.silver, (v) => "₹" + fmtNum(v) + "/kg"],
       ].filter(([, obj]) => obj && obj.value != null); // hide any tile we couldn't get real data for, instead of showing "—"
       if (!items.length) {
         el("tickerScroll").innerHTML = '<div class="loading-state" style="padding:0; font-size:12px;">Market data unavailable right now.</div>';
