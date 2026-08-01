@@ -83,19 +83,8 @@ TICKER_SYMBOLS = {
     "nifty": "^NSEI",
     "usdinr": "INR=X",
     "crude": "CL=F",
-    "gold": "GC=F",     # USD per troy ounce — converted to INR/gram below
-    "silver": "SI=F",   # USD per troy ounce — converted to INR/10g below
-}
-# Futures contracts (GC=F/SI=F) occasionally go stale around contract
-# rollover; these FX-style spot tickers track the same metal price but
-# don't expire, so we try them FIRST and only fall back to the futures
-# symbol above if Yahoo has no data for the spot ticker either.
-METAL_SPOT_FALLBACK = {
-    "gold": "XAUUSD=X",
-    "silver": "XAGUSD=X",
 }
 TICKER_CACHE_SECONDS = 60
-TROY_OUNCE_IN_GRAMS = 31.1034768
 
 # NSE India's own (unofficial but official-source) JSON API. This needs a
 # warmed-up session (cookies from a normal page load) before the API will
@@ -823,20 +812,15 @@ def _direction(pct: float) -> str:
 
 
 def build_ticker() -> dict:
-    """Fetch Sensex/Nifty/Gold/USD-INR/Crude/Silver, cached for TICKER_CACHE_SECONDS."""
+    """Fetch Sensex/Nifty/USD-INR/Crude, cached for TICKER_CACHE_SECONDS."""
     global _ticker_cache, _ticker_cache_time
     now = time.time()
     if _ticker_cache and (now - _ticker_cache_time) < TICKER_CACHE_SECONDS:
         return _ticker_cache
 
-    quotes = {name: _fetch_yahoo_quote(sym) for name, sym in TICKER_SYMBOLS.items() if name not in ("nifty", "gold", "silver")}
+    quotes = {name: _fetch_yahoo_quote(sym) for name, sym in TICKER_SYMBOLS.items() if name != "nifty"}
     # Nifty: prefer NSE's own official index feed (most accurate); Yahoo as fallback only.
     quotes["nifty"] = _fetch_nse_index("NIFTY 50") or _fetch_yahoo_quote(TICKER_SYMBOLS["nifty"])
-    # Gold/silver: try the non-expiring spot ticker first, then the futures
-    # contract as a second attempt — only genuinely give up (and let the
-    # frontend hide the tile) if both fail.
-    for metal in ("gold", "silver"):
-        quotes[metal] = _fetch_yahoo_quote(METAL_SPOT_FALLBACK[metal]) or _fetch_yahoo_quote(TICKER_SYMBOLS[metal])
     result = {}
 
     for name in ("sensex", "nifty", "crude"):
@@ -848,39 +832,11 @@ def build_ticker() -> dict:
             result[name] = {"value": None, "change_pct": None, "direction": "FLAT"}
 
     usdinr_q = quotes.get("usdinr")
-    usdinr_rate = usdinr_q["price"] if usdinr_q else None
     if usdinr_q:
         pct = _pct_change(usdinr_q["price"], usdinr_q["prev_close"])
         result["usdinr"] = {"value": round(usdinr_q["price"], 2), "change_pct": pct, "direction": _direction(pct)}
     else:
         result["usdinr"] = {"value": None, "change_pct": None, "direction": "FLAT"}
-
-    # Gold/silver futures (COMEX, via Yahoo) are the international spot price,
-    # in USD per troy ounce — noticeably lower than what MCX/domestic bullion
-    # actually trades at, because Indian prices bake in import duty + GST +
-    # a dealer premium on top of the international price. There is no free
-    # live MCX price feed available (genuine MCX data access costs upwards of
-    # ₹20 lakh/year), so instead of showing the (misleadingly low) raw
-    # international conversion, we apply the standard ~10% duty+GST markup
-    # widely used for back-of-envelope domestic estimates. This still won't
-    # match the exact MCX tick, but it lands in the right ballpark instead of
-    # being systematically ~10% under it.
-    DOMESTIC_METAL_PREMIUM = 1.10
-    METAL_UNITS = {"gold": (10, "10g"), "silver": (1000, "kg")}
-    for name, (grams, unit_label) in METAL_UNITS.items():
-        q = quotes.get(name)
-        if q and usdinr_rate:
-            price_inr = (q["price"] / TROY_OUNCE_IN_GRAMS) * usdinr_rate * grams * DOMESTIC_METAL_PREMIUM
-            prev_inr = (q["prev_close"] / TROY_OUNCE_IN_GRAMS) * usdinr_rate * grams * DOMESTIC_METAL_PREMIUM
-            pct = _pct_change(price_inr, prev_inr)
-            result[name] = {
-                "value": round(price_inr, 2),
-                "change_pct": pct,
-                "direction": _direction(pct),
-                "unit": f"INR/{unit_label}",
-            }
-        else:
-            result[name] = {"value": None, "change_pct": None, "direction": "FLAT", "unit": f"INR/{unit_label}"}
 
     result["updated_at"] = datetime.now(timezone.utc).isoformat()
     _ticker_cache = result
@@ -1237,7 +1193,7 @@ def api_events():
 
 @app.route("/api/ticker")
 def api_ticker():
-    """Live-ish Sensex/Nifty/Gold/USD-INR/Crude/Silver snapshot (best-effort, cached)."""
+    """Live-ish Sensex/Nifty/USD-INR/Crude snapshot (best-effort, cached)."""
     return jsonify(build_ticker())
 
 
