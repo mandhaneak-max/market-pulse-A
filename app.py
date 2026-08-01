@@ -1137,9 +1137,20 @@ def api_news():
         articles = list(_news_store.values())
 
     if q:
+        # Multi-word queries (e.g. a broad category search like "gold silver
+        # crude oil commodity") match if ANY keyword is present — requiring
+        # the whole phrase verbatim would almost never match a real headline.
+        # Short/common words are dropped so they don't drown results in noise.
+        STOPWORDS = {"and", "the", "of", "in", "on", "for", "to", "a", "an", "or"}
+        keywords = [w for w in q.split() if len(w) >= 3 and w not in STOPWORDS]
+        if not keywords:
+            keywords = [q]
         articles = [
             a for a in articles
-            if q in a["title"].lower() or q in a["summary"].lower() or q in a["source"].lower()
+            if any(
+                kw in a["title"].lower() or kw in a["summary"].lower() or kw in a["source"].lower()
+                for kw in keywords
+            )
         ]
 
     if days:
