@@ -112,9 +112,17 @@ YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Market
 TICKER_SYMBOLS = {
     "sensex": "^BSESN",
     "nifty": "^NSEI",
+    "banknifty": "^NSEBANK",
+    "niftyit": "^CNXIT",
+    "niftyauto": "^CNXAUTO",
     "usdinr": "INR=X",
     "crude": "CL=F",
+    "natgas": "NG=F",
+    "copper": "HG=F",
+    "gold": "GC=F",    # USD/troy-oz futures — converted to INR/10g below
+    "silver": "SI=F",  # USD/troy-oz futures — converted to INR/kg below
 }
+TROY_OUNCE_GRAMS = 31.1034768
 TICKER_CACHE_SECONDS = 60
 
 # NSE India's own (unofficial but official-source) JSON API. This needs a
@@ -851,7 +859,9 @@ def _direction(pct: float) -> str:
 
 
 def build_ticker() -> dict:
-    """Fetch Sensex/Nifty/USD-INR/Crude, cached for TICKER_CACHE_SECONDS."""
+    """Fetch all index + commodity quotes, cached for TICKER_CACHE_SECONDS.
+    Returns both the homepage's original 4 items (sensex, nifty, usdinr, crude)
+    and the extra items the Stock News / Commodity News pages show."""
     global _ticker_cache, _ticker_cache_time
     now = time.time()
     if _ticker_cache and (now - _ticker_cache_time) < TICKER_CACHE_SECONDS:
@@ -862,7 +872,8 @@ def build_ticker() -> dict:
     quotes["nifty"] = _fetch_nse_index("NIFTY 50") or _fetch_yahoo_quote(TICKER_SYMBOLS["nifty"])
     result = {}
 
-    for name in ("sensex", "nifty", "crude"):
+    # Plain index/commodity quotes — no unit conversion needed.
+    for name in ("sensex", "nifty", "banknifty", "niftyit", "niftyauto", "crude", "natgas", "copper"):
         q = quotes.get(name)
         if q:
             pct = _pct_change(q["price"], q["prev_close"])
@@ -871,11 +882,29 @@ def build_ticker() -> dict:
             result[name] = {"value": None, "change_pct": None, "direction": "FLAT"}
 
     usdinr_q = quotes.get("usdinr")
+    usdinr_rate = usdinr_q["price"] if usdinr_q else None
     if usdinr_q:
         pct = _pct_change(usdinr_q["price"], usdinr_q["prev_close"])
         result["usdinr"] = {"value": round(usdinr_q["price"], 2), "change_pct": pct, "direction": _direction(pct)}
     else:
         result["usdinr"] = {"value": None, "change_pct": None, "direction": "FLAT"}
+
+    # Gold/silver futures are quoted in USD per troy ounce — convert to the
+    # units Indian retail/bullion prices are actually quoted in: gold per 10
+    # grams, silver per kilogram. Still an illustrative COMEX-futures-based
+    # conversion (no free official MCX feed exists), not an exact bullion rate.
+    for name, (grams, unit_label) in (("gold", (10, "10g")), ("silver", (1000, "kg"))):
+        q = quotes.get(name)
+        if q and usdinr_rate:
+            price_inr = (q["price"] / TROY_OUNCE_GRAMS) * usdinr_rate * grams
+            prev_inr = (q["prev_close"] / TROY_OUNCE_GRAMS) * usdinr_rate * grams
+            pct = _pct_change(price_inr, prev_inr)
+            result[name] = {
+                "value": round(price_inr, 2), "change_pct": pct,
+                "direction": _direction(pct), "unit": f"INR/{unit_label}",
+            }
+        else:
+            result[name] = {"value": None, "change_pct": None, "direction": "FLAT", "unit": f"INR/{unit_label}"}
 
     result["updated_at"] = datetime.now(timezone.utc).isoformat()
     _ticker_cache = result
