@@ -54,18 +54,49 @@ GEMINI_URL = (
     f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 )
 
+# --------------------------------------------------------------------------
+# Visitor analytics — lightweight, in-memory (no database needed).
+# NOTE: this resets whenever the Render process restarts/redeploys/sleeps
+# (free-tier dynos aren't persistent). That's fine for a rough "how many
+# people are visiting and when" view; it just won't remember history across
+# restarts. Ask me if you'd like this made persistent later (e.g. a small
+# SQLite file or a free hosted DB) — happy to wire that up too.
+# --------------------------------------------------------------------------
+ADMIN_KEY = os.environ.get("ADMIN_KEY", "atharv2026")  # change this via Render's env var settings!
+_visits: list[dict] = []
+_visits_lock = threading.Lock()
+MAX_STORED_VISITS = 20000  # keep memory bounded on a long-running free dyno
+
 # Free, publicly-available Indian financial news RSS feeds.
 # If any one of these ever changes its URL, the app keeps working with the rest
 # (each feed is fetched in its own try/except block).
+# Each feed is tagged with a default "category" so the Stock News / Commodity
+# News pages can filter by SOURCE (precise) rather than guessing from
+# keywords in the title (noisy) — the dedicated Moneycontrol Commodities feed
+# is the app's own commodities desk, so anything from it is reliably
+# commodity news. A per-article keyword override below also re-classifies
+# any commodity-flavoured article that slips into a general "stock" feed
+# (and vice-versa), so the split stays clean either way.
 RSS_FEEDS = {
-    "Moneycontrol": "https://www.moneycontrol.com/rss/business.xml",
-    "Moneycontrol Markets": "https://www.moneycontrol.com/rss/marketreports.xml",
-    "Economic Times": "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms",
-    "Livemint": "https://www.livemint.com/rss/markets",
-    "Business Standard": "https://www.business-standard.com/rss/markets-106.rss",
-    "Financial Express": "https://www.financialexpress.com/market/feed/",
-    "CNBC-TV18": "https://www.cnbctv18.com/commonfeeds/v1/cne/rss/market.xml",
+    "Moneycontrol": {"url": "https://www.moneycontrol.com/rss/business.xml", "category": "stock"},
+    "Moneycontrol Markets": {"url": "https://www.moneycontrol.com/rss/marketreports.xml", "category": "stock"},
+    "Economic Times": {"url": "https://economictimes.indiatimes.com/markets/rssfeeds/1977021501.cms", "category": "stock"},
+    "Livemint": {"url": "https://www.livemint.com/rss/markets", "category": "stock"},
+    "Business Standard": {"url": "https://www.business-standard.com/rss/markets-106.rss", "category": "stock"},
+    "Financial Express": {"url": "https://www.financialexpress.com/market/feed/", "category": "stock"},
+    "CNBC-TV18": {"url": "https://www.cnbctv18.com/commonfeeds/v1/cne/rss/market.xml", "category": "stock"},
+    "Moneycontrol Commodities": {"url": "https://www.moneycontrol.com/rss/commodities.xml", "category": "commodity"},
 }
+
+# Any article (regardless of which feed it came from) whose title clearly
+# reads as commodity news gets bucketed as "commodity" even if it came from
+# a general "stock" feed — and, by elimination, anything NOT matching stays
+# out of the commodity bucket, keeping Stock News free of gold/crude stories.
+COMMODITY_TITLE_KEYWORDS = (
+    "gold", "silver", "bullion", "crude oil", "crude prices", "mcx", "brent",
+    "wti", "commodity", "commodities", "natural gas", "copper", "zinc",
+    "aluminium", "opec", "precious metal",
+)
 
 FETCH_INTERVAL_SECONDS = 300     # re-pull RSS feeds at most every 5 minutes
 MAX_STORED_ARTICLES = 3000       # keep a much larger accumulated history
@@ -321,7 +352,9 @@ def fetch_all_feeds(force: bool = False) -> None:
     if not force and _news_store and (now - _last_fetch_time) < FETCH_INTERVAL_SECONDS:
         return
 
-    for source_name, url in RSS_FEEDS.items():
+    for source_name, feed_info in RSS_FEEDS.items():
+        url = feed_info["url"]
+        default_category = feed_info["category"]
         try:
             parsed = feedparser.parse(url)
             if parsed.bozo and not parsed.entries:
@@ -337,6 +370,11 @@ def fetch_all_feeds(force: bool = False) -> None:
                 summary = _clean_html(entry.get("summary", "") or entry.get("description", ""))
                 article_id = hashlib.md5(link.encode("utf-8")).hexdigest()
 
+                category = default_category
+                title_lower = title.lower()
+                if any(kw in title_lower for kw in COMMODITY_TITLE_KEYWORDS):
+                    category = "commodity"
+
                 with _lock:
                     _news_store[link] = {
                         "id": article_id,
@@ -345,6 +383,7 @@ def fetch_all_feeds(force: bool = False) -> None:
                         "link": link,
                         "source": source_name,
                         "published": _parse_published(entry),
+                        "category": category,
                     }
         except Exception as exc:
             print(f"[market-pulse] WARNING: failed to fetch '{source_name}': {exc}")
@@ -1107,8 +1146,30 @@ EVENTS = [
 # Routes — frontend
 # --------------------------------------------------------------------------
 
+def _client_ip() -> str:
+    xff = request.headers.get("X-Forwarded-For", "")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.remote_addr or "unknown"
+
+
+def _record_visit() -> None:
+    """Log a page visit for the admin analytics view. Wrapped defensively —
+    analytics must never be able to break an actual page load."""
+    try:
+        now = datetime.now(timezone.utc)
+        ip_hash = hashlib.md5(_client_ip().encode("utf-8")).hexdigest()[:10]
+        with _visits_lock:
+            _visits.append({"ts": now.isoformat(), "ip_hash": ip_hash})
+            if len(_visits) > MAX_STORED_VISITS:
+                del _visits[: len(_visits) - MAX_STORED_VISITS]
+    except Exception:
+        pass
+
+
 @app.route("/")
 def serve_index():
+    _record_visit()
     return send_from_directory(BASE_DIR, "index.html")
 
 
@@ -1125,16 +1186,25 @@ def health():
 def api_news():
     """
     Query params:
-      q     - free-text search across title/summary/source/ticker-like words
-      days  - only return articles from the last N days (defaults to all stored)
+      q        - free-text search across title/summary/source/ticker-like words
+      days     - only return articles from the last N days (defaults to all stored)
+      category - "stock" or "commodity": only articles tagged with that category
+                 (tagged by feed source + title keywords at fetch time — see
+                 RSS_FEEDS/COMMODITY_TITLE_KEYWORDS — far more precise than a
+                 free-text keyword search, which is why the Stock/Commodity
+                 News pages use this instead of `q`)
     """
     fetch_all_feeds()
 
     q = request.args.get("q", "").strip().lower()
     days = request.args.get("days", type=int)
+    category = request.args.get("category", "").strip().lower()
 
     with _lock:
         articles = list(_news_store.values())
+
+    if category in ("stock", "commodity"):
+        articles = [a for a in articles if a.get("category") == category]
 
     if q:
         # Multi-word queries (e.g. a broad category search like "gold silver
@@ -1374,6 +1444,150 @@ def api_chat():
         return jsonify({"error": f"Chat failed: {exc}"}), 502
 
     return jsonify({"reply": reply})
+
+
+# --------------------------------------------------------------------------
+# Routes — admin / visitor analytics
+# --------------------------------------------------------------------------
+
+@app.route("/api/analytics")
+def api_analytics():
+    """Visit counts + a daily/hourly time series, for the /admin dashboard.
+    Protected by a simple ?key= check against ADMIN_KEY (set via Render env
+    vars) — not bulletproof security, but keeps random visitors from finding
+    it by accident."""
+    if request.args.get("key", "") != ADMIN_KEY:
+        return jsonify({"error": "unauthorized"}), 401
+
+    with _visits_lock:
+        visits = list(_visits)
+
+    total = len(visits)
+    unique_visitors = len({v["ip_hash"] for v in visits})
+
+    now = datetime.now(timezone.utc)
+    today_str = now.strftime("%Y-%m-%d")
+
+    daily_counts: dict[str, int] = {}
+    for i in range(13, -1, -1):
+        day = (now - timedelta(days=i)).strftime("%Y-%m-%d")
+        daily_counts[day] = 0
+    for v in visits:
+        day = v["ts"][:10]
+        if day in daily_counts:
+            daily_counts[day] += 1
+
+    hourly_counts: dict[str, int] = {f"{h:02d}": 0 for h in range(24)}
+    for v in visits:
+        if v["ts"][:10] == today_str:
+            try:
+                hour = datetime.fromisoformat(v["ts"]).strftime("%H")
+                hourly_counts[hour] += 1
+            except Exception:
+                pass
+
+    return jsonify({
+        "total_visits": total,
+        "unique_visitors": unique_visitors,
+        "today_visits": daily_counts.get(today_str, 0),
+        "daily": [{"date": d, "count": c} for d, c in daily_counts.items()],
+        "hourly_today": [{"hour": h, "count": c} for h, c in hourly_counts.items()],
+    })
+
+
+ADMIN_PAGE_HTML = """<!DOCTYPE html>
+<html><head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>SignalX — Visitor Analytics</title>
+<style>
+  body{ margin:0; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif; background:#0f1117; color:#e8eaf0; padding:24px; }
+  h1{ font-size:20px; margin-bottom:4px; }
+  .sub{ color:#8890a0; font-size:13px; margin-bottom:24px; }
+  .stat-row{ display:flex; gap:12px; flex-wrap:wrap; margin-bottom:28px; }
+  .stat-card{ background:#171a24; border:1px solid #262b3a; border-radius:12px; padding:16px 20px; flex:1; min-width:140px; }
+  .stat-num{ font-size:28px; font-weight:700; }
+  .stat-label{ font-size:12px; color:#8890a0; margin-top:4px; }
+  .chart-card{ background:#171a24; border:1px solid #262b3a; border-radius:12px; padding:20px; margin-bottom:20px; }
+  .chart-title{ font-size:14px; font-weight:600; margin-bottom:16px; }
+  .bar{ fill:#14b8a6; }
+  .bar:hover{ fill:#f59e0b; }
+  .axis-label{ fill:#8890a0; font-size:9px; }
+  .refresh-btn{ background:#14b8a6; color:#0f1117; border:none; border-radius:8px; padding:8px 16px; font-size:13px; font-weight:600; cursor:pointer; }
+  .locked{ text-align:center; margin-top:80px; }
+</style>
+</head>
+<body>
+  <h1>📊 SignalX Visitor Analytics</h1>
+  <div class="sub">Live, in-memory stats — resets on server restart. <button class="refresh-btn" onclick="load()">↻ Refresh</button></div>
+
+  <div class="stat-row" id="statRow"></div>
+
+  <div class="chart-card">
+    <div class="chart-title">Visits — last 14 days</div>
+    <svg id="dailyChart" width="100%" height="200" viewBox="0 0 700 200"></svg>
+  </div>
+
+  <div class="chart-card">
+    <div class="chart-title">Visits by hour — today</div>
+    <svg id="hourlyChart" width="100%" height="180" viewBox="0 0 700 180"></svg>
+  </div>
+
+<script>
+const KEY = new URLSearchParams(window.location.search).get("key") || "";
+
+function drawBarChart(svgEl, data, labelKey, valueKey, height) {
+  const w = 700, h = height, padL = 30, padB = 24, padT = 10;
+  const max = Math.max(1, ...data.map(d => d[valueKey]));
+  const barW = (w - padL - 10) / data.length;
+  let svg = "";
+  data.forEach((d, i) => {
+    const barH = ((h - padB - padT) * d[valueKey]) / max;
+    const x = padL + i * barW + 2;
+    const y = h - padB - barH;
+    svg += '<rect class="bar" x="' + x + '" y="' + y + '" width="' + (barW - 4) + '" height="' + barH + '" rx="2"><title>' + d[labelKey] + ": " + d[valueKey] + '</title></rect>';
+    if (i % Math.max(1, Math.ceil(data.length / 14)) === 0) {
+      svg += '<text class="axis-label" x="' + x + '" y="' + (h - 6) + '">' + d[labelKey].slice(-5) + '</text>';
+    }
+  });
+  svg += '<line x1="' + padL + '" y1="' + (h - padB) + '" x2="' + w + '" y2="' + (h - padB) + '" stroke="#262b3a"/>';
+  svgEl.innerHTML = svg;
+}
+
+async function load() {
+  const res = await fetch("/api/analytics?key=" + encodeURIComponent(KEY));
+  if (!res.ok) {
+    document.body.innerHTML = '<div class="locked"><h2>🔒 Unauthorized</h2><p style="color:#8890a0;">Add <code>?key=YOUR_ADMIN_KEY</code> to the URL.</p></div>';
+    return;
+  }
+  const data = await res.json();
+
+  document.getElementById("statRow").innerHTML =
+    '<div class="stat-card"><div class="stat-num">' + data.total_visits + '</div><div class="stat-label">Total visits (since last restart)</div></div>' +
+    '<div class="stat-card"><div class="stat-num">' + data.unique_visitors + '</div><div class="stat-label">Unique visitors (approx)</div></div>' +
+    '<div class="stat-card"><div class="stat-num">' + data.today_visits + '</div><div class="stat-label">Visits today</div></div>';
+
+  drawBarChart(document.getElementById("dailyChart"), data.daily, "date", "count", 200);
+  drawBarChart(document.getElementById("hourlyChart"), data.hourly_today.map(h => ({ hour: h.hour + ":00", count: h.count })), "hour", "count", 180);
+}
+load();
+setInterval(load, 30000);
+</script>
+</body>
+</html>"""
+
+
+@app.route("/admin")
+def admin_page():
+    """Simple visitor-analytics dashboard. Visit /admin?key=YOUR_ADMIN_KEY
+    (set ADMIN_KEY in Render's environment variables — defaults to
+    'atharv2026', please change it!)."""
+    if request.args.get("key", "") != ADMIN_KEY:
+        return (
+            "<div style='font-family:sans-serif;text-align:center;margin-top:80px;'>"
+            "<h2>🔒 Unauthorized</h2><p style='color:#888;'>Add <code>?key=YOUR_ADMIN_KEY</code> to the URL.</p></div>"
+        ), 401
+    return ADMIN_PAGE_HTML
 
 
 # --------------------------------------------------------------------------
