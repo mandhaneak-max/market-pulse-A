@@ -92,10 +92,24 @@ RSS_FEEDS = {
 # reads as commodity news gets bucketed as "commodity" even if it came from
 # a general "stock" feed — and, by elimination, anything NOT matching stays
 # out of the commodity bucket, keeping Stock News free of gold/crude stories.
-COMMODITY_TITLE_KEYWORDS = (
-    "gold", "silver", "bullion", "crude oil", "crude prices", "mcx", "brent",
-    "wti", "commodity", "commodities", "natural gas", "copper", "zinc",
-    "aluminium", "opec", "precious metal",
+# These are unambiguous — they essentially never appear in a stock/company
+# headline, so any match here is reliably commodity-market news.
+COMMODITY_STRONG_KEYWORDS = (
+    "bullion", "mcx", "brent", "wti", "commodity", "commodities",
+    "crude oil", "crude prices", "natural gas", "opec", "precious metal",
+)
+
+# These metal names are ALSO extremely common in Indian stock/company names
+# and stories (Hindustan Copper, Vedanta, Titan, Hindalco, NALCO, jewellers,
+# etc.) — e.g. "Hindustan Copper shares surge 5%" is a STOCK story, not a
+# commodity-price story, even though "copper" appears in it. So these only
+# count as commodity news when paired with an actual price-context word.
+COMMODITY_AMBIGUOUS_KEYWORDS = ("gold", "silver", "copper", "zinc", "aluminium")
+COMMODITY_CONTEXT_WORDS = (
+    "price", "prices", "rate", "rates", "rise", "rises", "rising", "fall", "falls", "falling",
+    "gain", "gains", "dip", "dips", "surge", "surges", "jump", "jumps", "today",
+    "futures", "demand", "imports", "outlook", "forecast", "record", "climbs",
+    "slips", "drops", "declines", "per gram", "per 10 gram", "per kg", "per ounce",
 )
 
 FETCH_INTERVAL_SECONDS = 300     # re-pull RSS feeds at most every 5 minutes
@@ -123,6 +137,12 @@ TICKER_SYMBOLS = {
     "silver": "SI=F",  # USD/troy-oz futures — converted to INR/kg below
 }
 TROY_OUNCE_GRAMS = 31.1034768
+
+# India's gold/silver import duty is set by government policy and changes
+# periodically (it moved from 6% to 15% in May 2026) — 3% GST applies on top.
+# Override via env var if it changes again, without needing a code deploy:
+#   INDIA_BULLION_MARKUP_PCT=18  (== 15% duty + 3% GST, the default below)
+INDIA_BULLION_MARKUP_PCT = float(os.environ.get("INDIA_BULLION_MARKUP_PCT", "18"))
 TICKER_CACHE_SECONDS = 60
 
 # NSE India's own (unofficial but official-source) JSON API. This needs a
@@ -380,7 +400,10 @@ def fetch_all_feeds(force: bool = False) -> None:
 
                 category = default_category
                 title_lower = title.lower()
-                if any(kw in title_lower for kw in COMMODITY_TITLE_KEYWORDS):
+                if any(kw in title_lower for kw in COMMODITY_STRONG_KEYWORDS):
+                    category = "commodity"
+                elif any(kw in title_lower for kw in COMMODITY_AMBIGUOUS_KEYWORDS) and \
+                        any(ctx in title_lower for ctx in COMMODITY_CONTEXT_WORDS):
                     category = "commodity"
 
                 with _lock:
@@ -889,15 +912,21 @@ def build_ticker() -> dict:
     else:
         result["usdinr"] = {"value": None, "change_pct": None, "direction": "FLAT"}
 
-    # Gold/silver futures are quoted in USD per troy ounce — convert to the
-    # units Indian retail/bullion prices are actually quoted in: gold per 10
-    # grams, silver per kilogram. Still an illustrative COMEX-futures-based
-    # conversion (no free official MCX feed exists), not an exact bullion rate.
+    # Gold/silver futures are quoted in USD per troy ounce at the RAW
+    # INTERNATIONAL price — but a real Indian bullion price also includes
+    # import duty + GST, which are NOT in a plain spot conversion. India hiked
+    # gold/silver import duty from 6% to 15% in May 2026, so raw-spot INR
+    # numbers run meaningfully below real Indian prices. We approximate the
+    # landed Indian price by applying that duty + 3% GST as a markup.
+    # This rate changes with government policy, so it's an env var, not a
+    # hardcoded constant — update INDIA_BULLION_MARKUP_PCT if it changes again
+    # (check https://www.gold.org or a recent news search for the current rate).
+    markup_multiplier = 1 + (INDIA_BULLION_MARKUP_PCT / 100)
     for name, (grams, unit_label) in (("gold", (10, "10g")), ("silver", (1000, "kg"))):
         q = quotes.get(name)
         if q and usdinr_rate:
-            price_inr = (q["price"] / TROY_OUNCE_GRAMS) * usdinr_rate * grams
-            prev_inr = (q["prev_close"] / TROY_OUNCE_GRAMS) * usdinr_rate * grams
+            price_inr = (q["price"] / TROY_OUNCE_GRAMS) * usdinr_rate * grams * markup_multiplier
+            prev_inr = (q["prev_close"] / TROY_OUNCE_GRAMS) * usdinr_rate * grams * markup_multiplier
             pct = _pct_change(price_inr, prev_inr)
             result[name] = {
                 "value": round(price_inr, 2), "change_pct": pct,
@@ -1219,9 +1248,9 @@ def api_news():
       days     - only return articles from the last N days (defaults to all stored)
       category - "stock" or "commodity": only articles tagged with that category
                  (tagged by feed source + title keywords at fetch time — see
-                 RSS_FEEDS/COMMODITY_TITLE_KEYWORDS — far more precise than a
-                 free-text keyword search, which is why the Stock/Commodity
-                 News pages use this instead of `q`)
+                 RSS_FEEDS/COMMODITY_STRONG_KEYWORDS/COMMODITY_AMBIGUOUS_KEYWORDS —
+                 far more precise than a free-text keyword search, which is why
+                 the Stock/Commodity News pages use this instead of `q`)
     """
     fetch_all_feeds()
 
