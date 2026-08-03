@@ -13,6 +13,14 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
 <meta name="theme-color" content="#0a1f4d" />
 <title>SignalX</title>
+<meta name="description" content="SignalX turns Indian stock market news into plain-language AI summaries — live headlines, stock lookup, market prediction, and a chat assistant." />
+<meta property="og:title" content="SignalX — Market news, explained simply" />
+<meta property="og:description" content="Live Indian market news, AI-simplified summaries, stock lookup, and market outlook — all in one place." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://market-pulse-a.onrender.com/" />
+<meta name="twitter:card" content="summary" />
+<meta name="twitter:title" content="SignalX — Market news, explained simply" />
+<meta name="twitter:description" content="Live Indian market news, AI-simplified summaries, stock lookup, and market outlook — all in one place." />
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 40 40'%3E%3Crect x='1' y='1' width='38' height='38' rx='9' fill='%23134e4a'/%3E%3Cline x1='9' y1='11' x2='9' y2='27' stroke='%23fca5a5' stroke-width='2' stroke-linecap='round'/%3E%3Crect x='6' y='15' width='6' height='9' rx='1.4' fill='%23fb7185'/%3E%3Cline x1='16.5' y1='7' x2='16.5' y2='23' stroke='%2386efac' stroke-width='2' stroke-linecap='round'/%3E%3Crect x='13.5' y='9' width='6' height='11' rx='1.4' fill='%234ade80'/%3E%3Cline x1='24' y1='13' x2='24' y2='25' stroke='%23fca5a5' stroke-width='2' stroke-linecap='round'/%3E%3Crect x='21' y='16' width='6' height='7' rx='1.4' fill='%23fb7185'/%3E%3Cline x1='31.5' y1='5' x2='31.5' y2='21' stroke='%2386efac' stroke-width='2' stroke-linecap='round'/%3E%3Crect x='28.5' y='7' width='6' height='12' rx='1.4' fill='%234ade80'/%3E%3C/svg%3E" />
 
 <style>
@@ -452,6 +460,11 @@
     SignalX aggregates public RSS headlines and uses Gemini AI to generate plain-language,
     illustrative summaries. Sector/stock impact estimates and predictions are
     <strong>not</strong> financial advice — always do your own research before investing.
+    SignalX is not a SEBI-registered investment adviser or research analyst, and nothing on
+    this site is a recommendation to buy or sell any security.
+  </div>
+  <div class="footer-note" style="padding-top:0;">
+    This site uses Google Analytics to understand visits. By using this site you agree to that.
   </div>
   <div class="bottom-credit">Developed by Atharv Mandhne</div>
 </main>
@@ -560,7 +573,7 @@
       langHint: "| AI summaries below use this language",
       searchPlaceholder: "Search any stock, company, topic…",
       chatPlaceholder: "Ask about any stock or market topic…",
-      footer: 'SignalX aggregates public RSS headlines and uses Gemini AI to generate plain-language, illustrative summaries. Sector/stock impact estimates and predictions are <strong>not</strong> financial advice — always do your own research before investing.',
+      footer: 'SignalX aggregates public RSS headlines and uses Gemini AI to generate plain-language, illustrative summaries. Sector/stock impact estimates and predictions are <strong>not</strong> financial advice — always do your own research before investing. SignalX is not a SEBI-registered investment adviser or research analyst, and nothing on this site is a recommendation to buy or sell any security.',
       today: "Today's News", past: "Past 7 Days", upcoming: "Upcoming Events", prediction: "Market Prediction",
     },
     hinglish: {
@@ -573,7 +586,7 @@
       langHint: "| Neeche ke AI summaries is language mein aayenge",
       searchPlaceholder: "Koi bhi stock, company, ya topic search karein…",
       chatPlaceholder: "Kisi bhi stock ya market topic ke baare mein poochein…",
-      footer: 'SignalX public RSS headlines collect karta hai aur Gemini AI se plain-language, illustrative summaries banata hai. Sector/stock impact estimates aur predictions <strong>financial advice nahi hain</strong> — invest karne se pehle apni research zaroor karein.',
+      footer: 'SignalX public RSS headlines collect karta hai aur Gemini AI se plain-language, illustrative summaries banata hai. Sector/stock impact estimates aur predictions <strong>financial advice nahi hain</strong> — invest karne se pehle apni research zaroor karein. SignalX koi SEBI-registered investment adviser ya research analyst nahi hai, aur yahan kuch bhi kisi security ko khareedne ya bechne ki recommendation nahi hai.',
       today: "Aaj ki News", past: "Pichle 7 Din", upcoming: "Aane Wale Events", prediction: "Market Prediction",
     },
   };
